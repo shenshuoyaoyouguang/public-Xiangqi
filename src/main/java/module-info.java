@@ -10,6 +10,7 @@ open module Xiangqi {
     requires com.microsoft.onnxruntime;
     requires java.desktop;
     requires java.sql;
+    requires java.net.http;
 
     exports com.sojourners.chess;
 
