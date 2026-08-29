@@ -277,27 +277,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
 
     @FXML
     public void analysisButtonClick(ActionEvent event) {
-        if (engine == null) {
-            DialogUtils.showWarningDialog("提示", "引擎未加载");
-            return;
-        }
-
-        robotAnalysis.setValue(!robotAnalysis.getValue());
-        if (robotAnalysis.getValue()) {
-            robotRed.setValue(false);
-            robotBlack.setValue(false);
-            engineGo();
-        } else {
-            engineStop();
-        }
-
-        redButton.setDisable(robotAnalysis.getValue());
-        blackButton.setDisable(robotAnalysis.getValue());
-        immediateButton.setDisable(robotAnalysis.getValue());
-
-        if (linkMode.getValue() && !robotAnalysis.getValue()) {
-            stopGraphLink();
-        }
+        toggleMode(robotAnalysis, true);
     }
 
     private void engineStop() {
@@ -339,22 +319,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
 
     @FXML
     public void blackButtonClick(ActionEvent event) {
-        if (engine == null) {
-            DialogUtils.showWarningDialog("提示", "引擎未加载");
-            return;
-        }
-
-        robotBlack.setValue(!robotBlack.getValue());
-        if (robotBlack.getValue() && !redGo) {
-            engineGo();
-        }
-        if (!robotBlack.getValue() && !redGo) {
-            engineStop();
-        }
-
-        if (linkMode.getValue() && !robotBlack.getValue()) {
-            stopGraphLink();
-        }
+        toggleMode(robotBlack, false);
     }
 
     @FXML
@@ -363,11 +328,8 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
         // 重新设置引擎列表
         refreshEngineComboBox();
         // 如果引擎被卸载，则关闭
-        if (StringUtils.isEmpty(prop.getEngineName())) {
-            // 重置按钮
-            robotRed.setValue(false);
-            robotBlack.setValue(false);
-            robotAnalysis.setValue(false);
+        if ((prop.getEngineName() == null || prop.getEngineName().isEmpty())) {
+            resetRobotModes();
             // 关闭引擎
             if (engine != null) {
                 engine.close();
@@ -376,22 +338,50 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
         }
     }
 
+    /** 重置三个机器人模式属性，不操作按钮禁用状态。 */
+    private void resetRobotModes() {
+        robotRed.setValue(false);
+        robotBlack.setValue(false);
+        robotAnalysis.setValue(false);
+    }
+
     @FXML
     public void redButtonClick(ActionEvent event) {
+        toggleMode(robotRed, false);
+    }
+
+    /**
+     * 切换引擎角色（机器人黑/红/分析模式）。
+     * isAnalysis=true 时，启用会取消另两项且禁用红/黑/立即按钮。
+     * 黑/红启用时仅在轮到该方行棋时启动引擎；取消时若为该方行棋则停止引擎。
+     */
+    private void toggleMode(SimpleObjectProperty<Boolean> mode, boolean isAnalysis) {
         if (engine == null) {
             DialogUtils.showWarningDialog("提示", "引擎未加载");
             return;
         }
 
-        robotRed.setValue(!robotRed.getValue());
-        if (robotRed.getValue() && redGo) {
-            engineGo();
-        }
-        if (!robotRed.getValue() && redGo) {
-            engineStop();
+        boolean enable = !mode.getValue();
+        mode.setValue(enable);
+
+        if (isAnalysis) {
+            if (enable) {
+                robotRed.setValue(false);
+                robotBlack.setValue(false);
+            }
+            redButton.setDisable(enable);
+            blackButton.setDisable(enable);
+            immediateButton.setDisable(enable);
+            if (enable) engineGo(); else engineStop();
+        } else {
+            boolean isRedMode = (mode == robotRed);
+            boolean isMyTurn = isRedMode ? redGo : !redGo;
+            if (isMyTurn) {
+                if (enable) engineGo(); else engineStop();
+            }
         }
 
-        if (linkMode.getValue() && !robotRed.getValue()) {
+        if (linkMode.getValue() && !enable) {
             stopGraphLink();
         }
     }
@@ -514,7 +504,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
     @FXML
     public void pasteButtonClick(ActionEvent e) {
         String fenCode = ClipboardUtils.getText();
-        if (StringUtils.isNotEmpty(fenCode) && fenCode.split("/").length == 10) {
+        if ((fenCode != null && !fenCode.isEmpty()) && fenCode.split("/").length == 10) {
             newFromOriginFen(fenCode);
         }
     }
@@ -533,7 +523,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
     public void exportImageMenuClick(ActionEvent e) {
         FileChooser fileChooser = new FileChooser();
         fileChooser.setInitialDirectory(new File(PathUtils.getJarPath()));
-        fileChooser.setInitialFileName("tchess_export_" + DateUtils.getDateTimeString(new Date()) + ".png");
+        fileChooser.setInitialFileName("tchess_export_" + new java.text.SimpleDateFormat("yyyyMMddHHmmssSSS").format(new Date()) + ".png");
         File file = fileChooser.showSaveDialog(App.getMainStage());
         if (file != null) {
             try {
@@ -899,7 +889,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
      * @param fenCode
      */
     private void newFromOriginFen(String fenCode) {
-        if (StringUtils.isNotEmpty(fenCode)) {
+        if ((fenCode != null && !fenCode.isEmpty())) {
             if (linkMode.getValue()) {
                 stopGraphLink();
             }
@@ -921,11 +911,9 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
      */
     private void newChessBoard(String fenCode, boolean fromManual) {
         // 重置按钮
-        robotRed.setValue(false);
+        resetRobotModes();
         redButton.setDisable(false);
-        robotBlack.setValue(false);
         blackButton.setDisable(false);
-        robotAnalysis.setValue(false);
         immediateButton.setDisable(false);
         isReverse.setValue(false);
         // 引擎停止计算
@@ -934,7 +922,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
         board = new ChessBoard(this.canvas, prop.getBoardSize(), prop.getBoardStyle(), prop.isStepTip(), prop.isManualTip(),
                 engine != null && engine.getMultiPV() > 1, prop.isStepSound(), prop.isShowNumber(), fenCode);
         // 设置局面
-        redGo = StringUtils.isEmpty(fenCode) ? true : fenCode.contains("w");
+        redGo = (fenCode == null || fenCode.isEmpty()) ? true : fenCode.contains("w");
         fenCode = board.fenCode(redGo);
         // 设置棋谱
         if (!fromManual)
@@ -1015,15 +1003,13 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
         engineComboBox.getSelectionModel().selectedItemProperty().addListener(new ChangeListener<String>() {
             @Override
             public void changed(ObservableValue<? extends String> observableValue, String s, String t1) {
-                if (StringUtils.isNotEmpty(t1) && !t1.equals(prop.getEngineName())) {
+                if ((t1 != null && !t1.isEmpty()) && !t1.equals(prop.getEngineName())) {
                     // 保存引擎设置
                     prop.setEngineName(t1);
                     // 重置三个按钮
-                    robotRed.setValue(false);
+                    resetRobotModes();
                     redButton.setDisable(false);
-                    robotBlack.setValue(false);
                     blackButton.setDisable(false);
-                    robotAnalysis.setValue(false);
                     immediateButton.setDisable(false);
                     // 停止连线
                     if (linkMode.getValue()) {
@@ -1116,7 +1102,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
 
     private void loadEngine(String name) {
         try {
-            if (StringUtils.isNotEmpty(name)) {
+            if ((name != null && !name.isEmpty())) {
                 for (EngineConfig ec : prop.getEngineConfigList()) {
                     if (name.equals(ec.getName())) {
                         if (engine != null) {
@@ -1254,7 +1240,6 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
         }
 
         OpenBookManager.getInstance().close();
-//        ExecutorsUtils.getInstance().close();
 
         graphLinker.stop();
 

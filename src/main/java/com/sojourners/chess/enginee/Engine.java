@@ -7,7 +7,6 @@ import com.sojourners.chess.model.EngineConfig;
 import com.sojourners.chess.model.ThinkData;
 import com.sojourners.chess.openbook.OpenBookManager;
 import com.sojourners.chess.util.PathUtils;
-import com.sojourners.chess.util.StringUtils;
 
 import java.io.*;
 import java.security.SecureRandom;
@@ -186,7 +185,7 @@ public class Engine {
     }
 
     private boolean validateMove(String move) {
-        if (StringUtils.isEmpty(move) || move.length() != 4) {
+        if (move == null || move.isEmpty() || move.length() != 4) {
             return false;
         }
         if (move.charAt(0) < 'a' || move.charAt(0) > 'i' || move.charAt(2) < 'a' || move.charAt(2) > 'i') {
@@ -224,7 +223,7 @@ public class Engine {
                 if (flag == 6) {
                     detail.add(str[i]);
                 } else {
-                    if (StringUtils.isDigit(str[i])) {
+                    if (str[i].matches("^-?\\d+$")) {
                         if (flag == 1) {
                             td.setNps(Long.parseLong(str[i]));
 

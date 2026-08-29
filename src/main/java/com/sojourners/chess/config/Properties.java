@@ -7,13 +7,12 @@ import com.sojourners.chess.openbook.MoveRule;
 import com.sojourners.chess.util.PathUtils;
 
 
-import java.io.*;
+import java.io.File;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Properties implements Serializable {
-
-    private static final long serialVersionUID = -1410031608529065857L;
+public class Properties {
 
     public static final String DEFAULT_FIRST_STEP_COLOR = "#800080";
     public static final String DEFAULT_SECOND_STEP_COLOR = "#008000";
@@ -150,57 +149,55 @@ public class Properties implements Serializable {
 
     public static synchronized Properties getInstance() {
         if (prop == null) {
-            String path = PathUtils.getJarPath() + "properties";
-            File file = new File(path);
-            if (file.exists()) {
-                ObjectInputStream os = null;
+            // 优先读取新的 JSON 配置
+            File jsonFile = new File(PathUtils.getJarPath() + "properties.json");
+            File legacyFile = new File(PathUtils.getJarPath() + "properties");
+            if (jsonFile.exists()) {
                 try {
-                    os = new ObjectInputStream(new FileInputStream(file));
-                    prop = (Properties) os.readObject();
+                    String text = Files.readString(jsonFile.toPath());
+                    prop = JsonPropertiesCodec.fromJson(text);
                 } catch (Exception e) {
                     e.printStackTrace();
-                } finally {
-                    try {
-                        if (os != null)
-                            os.close();
-                    } catch (Exception e) {
-                        e.printStackTrace();
+                    prop = defaults();
+                }
+            } else if (legacyFile.exists()) {
+                // Properties 已不再 Serializable，且没有无参构造器，
+                // 旧二进制文件无法读取。把文件重命名以保留备份，回退到默认配置。
+                try {
+                    File backup = new File(legacyFile.getPath() + ".legacy.bak");
+                    if (!legacyFile.renameTo(backup)) {
+                        legacyFile.delete();
                     }
-                }
-            } else {
-                try {
-                    List<EngineConfig> engineConfigList = new ArrayList<>();
-                    prop = new Properties(ChessBoard.BoardSize.AUTOFIT_BOARD, true,
-                            1, 16, "",
-                            Engine.AnalysisModel.FIXED_TIME, 5000, true,
-                            920, 737, 0.64, 0.6,
-                            100, 2, true, true, false,
-                            true, true, false, 2000, 9999,
-                            MoveRule.BEST_SCORE, true, new ArrayList<>());
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
+                prop = defaults();
+            } else {
+                prop = defaults();
             }
         }
         return prop;
     }
 
+    /** 默认配置实例。 */
+    public static Properties defaults() {
+        Properties p = new Properties(ChessBoard.BoardSize.AUTOFIT_BOARD, true,
+                1, 16, "",
+                Engine.AnalysisModel.FIXED_TIME, 5000, true,
+                920, 737, 0.64, 0.6,
+                100, 2, true, true, false,
+                true, true, false, 2000, 9999,
+                MoveRule.BEST_SCORE, true, new ArrayList<>());
+        return p;
+    }
+
     public void save() {
-        ObjectOutputStream os = null;
         try {
-            String path = PathUtils.getJarPath() + "properties";
-            File file = new File(path);
-            os = new ObjectOutputStream(new FileOutputStream(file));
-            os.writeObject(this);
+            File file = new File(PathUtils.getJarPath() + "properties.json");
+            String json = JsonPropertiesCodec.toJson(this);
+            Files.writeString(file.toPath(), json);
         } catch (Exception e) {
             e.printStackTrace();
-        } finally {
-            try {
-                if (os != null)
-                    os.close();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
         }
     }
 

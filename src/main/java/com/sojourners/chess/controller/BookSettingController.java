@@ -6,7 +6,6 @@ import com.sojourners.chess.enginee.Engine;
 import com.sojourners.chess.openbook.MoveRule;
 import com.sojourners.chess.openbook.OpenBookManager;
 import com.sojourners.chess.util.DialogUtils;
-import com.sojourners.chess.util.StringUtils;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.scene.control.CheckBox;
@@ -56,7 +55,7 @@ public class BookSettingController {
 
         String timeOut = cloudBookTimeout.getText();
         String offSteps = offManualSteps.getText();
-        if (!StringUtils.isPositiveInt(timeOut) || !StringUtils.isPositiveInt(offSteps)) {
+        if (!isPositiveInt(timeOut) || !isPositiveInt(offSteps)) {
             DialogUtils.showErrorDialog("失败", "超时时间或脱谱步数错误");
             return;
         }
@@ -84,6 +83,15 @@ public class BookSettingController {
         if (App.openLocalBookDialog()) {
             OpenBookManager.getInstance().setLocalOpenBooks();
         }
+    }
+
+
+    private static boolean isPositiveInt(String s) {
+        try { return Integer.parseInt(s) > 0; } catch (NumberFormatException e) { return false; }
+    }
+
+    private static boolean isNonNegativeInt(String s) {
+        try { return Integer.parseInt(s) >= 0; } catch (NumberFormatException e) { return false; }
     }
 
     public void initialize() {

@@ -2,14 +2,12 @@ package com.sojourners.chess.controller;
 
 import com.sojourners.chess.App;
 import com.sojourners.chess.config.Properties;
-import com.sojourners.chess.model.LocalBook;
 import com.sojourners.chess.util.PathUtils;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
-import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.stage.FileChooser;
 
@@ -17,7 +15,9 @@ import java.io.File;
 
 public class LocalBookController {
     @FXML
-    private TableView table;
+    private TableView<String> table;
+    @FXML
+    private TableColumn<String, String> nameCol;
 
     private Properties prop;
 
@@ -70,22 +70,19 @@ public class LocalBookController {
 
     private void refreshTable() {
         table.getItems().clear();
-        for (String book : prop.getOpenBookList()) {
-            table.getItems().add(new LocalBook(book));
-        }
+        table.getItems().addAll(prop.getOpenBookList());
 
         this.change = true;
     }
 
     public void initialize() {
-
-        TableColumn nameCol = (TableColumn) table.getColumns().get(0);
-        nameCol.setCellValueFactory(new PropertyValueFactory<LocalBook, String>("path"));
+        // TableView<String>: 直接返回 item 本身
+        nameCol.setCellValueFactory(cellData -> new javafx.beans.property.SimpleStringProperty(cellData.getValue()));
         // set open book path editable
         nameCol.setCellFactory(TextFieldTableCell.forTableColumn());
-        nameCol.setOnEditCommit((EventHandler<TableColumn.CellEditEvent<LocalBook, String>>) localBookStringCellEditEvent -> {
-            int row = localBookStringCellEditEvent.getTablePosition().getRow();
-            prop.getOpenBookList().set(row, localBookStringCellEditEvent.getNewValue());
+        nameCol.setOnEditCommit((EventHandler<TableColumn.CellEditEvent<String, String>>) ev -> {
+            int row = ev.getTablePosition().getRow();
+            prop.getOpenBookList().set(row, ev.getNewValue());
             refreshTable();
         });
 

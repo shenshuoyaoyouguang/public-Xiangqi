@@ -1,7 +1,6 @@
 package com.sojourners.chess.board;
 
 import com.sojourners.chess.config.Properties;
-import com.sojourners.chess.util.MathUtils;
 import com.sojourners.chess.util.XiangqiUtils;
 import javafx.geometry.VPos;
 import javafx.scene.canvas.Canvas;
@@ -144,11 +143,13 @@ public abstract class BaseBoardRender implements BoardRender {
         gc.setGlobalAlpha(opacity);
         gc.setFill(color);
 
-        double angle = MathUtils.calculateAngle(x1, y1, x2, y2);
+        // 箭杆沿局部 −x 方向画在 (x1,y1) 左侧，箭头尖须指向 (x2,y2)，
+        // 故旋转角 = atan2(dy,dx) + 180°。
+        double angle = Math.toDegrees(Math.atan2(y2 - y1, x2 - x1)) + 180.0;
         Rotate r = new Rotate(angle, x1, y1);
         gc.setTransform(r.getMxx(), r.getMyx(), r.getMxy(), r.getMyy(), r.getTx(), r.getTy());
 
-        int len = (int) MathUtils.calculateDistance(x1, y1, x2, y2);
+        int len = (int) Math.hypot(x2 - x1, y2 - y1);
         int tmpX2 = x1 - len;
 
         int tmpX1 = x1 - piece / 4;

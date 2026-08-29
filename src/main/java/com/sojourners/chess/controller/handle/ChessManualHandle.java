@@ -7,7 +7,6 @@ import com.sojourners.chess.model.ManualRecord;
 import com.sojourners.chess.util.ClipboardUtils;
 import com.sojourners.chess.util.DialogUtils;
 import com.sojourners.chess.util.PathUtils;
-import com.sojourners.chess.util.StringUtils;
 import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
@@ -84,7 +83,6 @@ public class ChessManualHandle {
         manualServices.put("txq", new TxqChessManualImpl());
         manualServices.put("pgn", new PgnChessManualImpl());
         manualServices.put("xqf", new XqfChessManualImpl());
-        manualServices.put("cbr", new CbrChessManualImpl());
     }
 
     public ChessManualHandle(BorderPane chessManualPane, CheckMenuItem menuOfChessNotation, CheckMenuItem menuOfShowTactic, TreeView notationTree,
@@ -135,7 +133,7 @@ public class ChessManualHandle {
     }
 
     private void refreshManualTree() {
-        if (!StringUtils.isEmpty(prop.getChessManualPath())) {
+        if (!(prop.getChessManualPath() == null || prop.getChessManualPath().isEmpty())) {
             openChessNotationFolder(prop.getChessManualPath());
         }
     }
@@ -171,7 +169,7 @@ public class ChessManualHandle {
             if (!remarkText.isFocused()) return;
 
             recordTable.getItems().get(p).setRemark(newV);
-            if (StringUtils.isEmpty(oldV) != StringUtils.isEmpty(newV)) {
+            if ((oldV == null || oldV.isEmpty()) != (newV == null || newV.isEmpty())) {
                 refreshRecordView(recordTable.getItems().get(p), null);
             }
         });
@@ -186,7 +184,7 @@ public class ChessManualHandle {
                 if (cellData.getValue().getList().size() > 1) {
                     text += "b";
                 }
-                if (StringUtils.isNotEmpty(cellData.getValue().getRemark())) {
+                if ((cellData.getValue().getRemark() != null && !cellData.getValue().getRemark().isEmpty())) {
                     text += "*";
                 }
                 return new SimpleStringProperty(text);
@@ -601,12 +599,11 @@ public class ChessManualHandle {
     public void openChessManualFile(ActionEvent actionEvent) {
         FileChooser fileChooser = new FileChooser();
         fileChooser.setInitialDirectory(new File(
-                StringUtils.isNotEmpty(prop.getChessManualPath()) ? prop.getChessManualPath() : PathUtils.getJarPath()));
-        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("全部(*.*)", "*.txq", "*.pgn", "*.xqf", "*.cbr"));
+                (prop.getChessManualPath() != null && !prop.getChessManualPath().isEmpty()) ? prop.getChessManualPath() : PathUtils.getJarPath()));
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("全部(*.*)", "*.txq", "*.pgn", "*.xqf"));
         fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("txq(*.txq)", "*.txq"));
         fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("pgn(*.pgn)", "*.pgn"));
         fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("xqf(*.xqf)", "*.xqf"));
-        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("cbr(*.cbr)", "*.cbr"));
         File file = fileChooser.showOpenDialog(App.getMainStage());
         if (file != null) {
             openFromFile(file);
@@ -652,14 +649,14 @@ public class ChessManualHandle {
     public void saveAsChessManualFile(ActionEvent event) {
         FileChooser fileChooser = new FileChooser();
         fileChooser.setInitialDirectory(new File(
-                StringUtils.isNotEmpty(prop.getChessManualPath()) ? prop.getChessManualPath() : PathUtils.getJarPath()));
+                (prop.getChessManualPath() != null && !prop.getChessManualPath().isEmpty()) ? prop.getChessManualPath() : PathUtils.getJarPath()));
         fileChooser.setInitialFileName("未命名");
         FileChooser.ExtensionFilter txq = new FileChooser.ExtensionFilter("txq(*.txq)", "*.txq");
         FileChooser.ExtensionFilter pgn = new FileChooser.ExtensionFilter("pgn(*.pgn)", "*.pgn");
         fileChooser.getExtensionFilters().addAll(txq, pgn);
         File file = fileChooser.showSaveDialog(App.getMainStage());
         if (file != null) {
-            if (StringUtils.isEmpty(PathUtils.getDotExtension(file))) {
+            if ((PathUtils.getDotExtension(file) == null || PathUtils.getDotExtension(file).isEmpty())) {
                 String ext = fileChooser.getSelectedExtensionFilter() == txq ? ".txq" : ".pgn";
                 file = new File(file.getParent(), file.getName() + ext);
             }

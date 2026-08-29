@@ -2,7 +2,6 @@ package com.sojourners.chess.manual;
 
 import com.sojourners.chess.board.ChessBoard;
 import com.sojourners.chess.model.ManualRecord;
-import com.sojourners.chess.util.StringUtils;
 import com.sojourners.chess.util.XiangqiUtils;
 
 import java.io.File;
@@ -229,7 +228,7 @@ public class PgnChessManualImpl implements ChessManualService {
         char[][] board = XiangqiUtils.fenToBoard(fenCode);
         while (mr != null) {
             String cnMove = mr.getCnMove();
-            if (StringUtils.isNotEmpty(cnMove) && mr.getId() > 0) {
+            if ((cnMove != null && !cnMove.isEmpty()) && mr.getId() > 0) {
                 StringBuilder sb = new StringBuilder();
                 ChessBoard.Step step = XiangqiUtils.translateCnMove(board, sb, cnMove);
                 mr.setMove(sb.toString());
@@ -265,7 +264,7 @@ public class PgnChessManualImpl implements ChessManualService {
 
     public String getTextFromChessManual(ManualRecord h, boolean remark) {
         StringBuilder sb = new StringBuilder();
-        if (remark && StringUtils.isNotEmpty(h.getRemark())) {
+        if (remark && (h.getRemark() != null && !h.getRemark().isEmpty())) {
             sb.append("{" + h.getRemark() + "}").append(System.lineSeparator());
         }
         sb.append(System.lineSeparator());
@@ -287,7 +286,7 @@ public class PgnChessManualImpl implements ChessManualService {
         }
         String move = record.getCnMove();
         sb.append(move + " ");
-        if (remark && StringUtils.isNotEmpty(record.getRemark())) {
+        if (remark && (record.getRemark() != null && !record.getRemark().isEmpty())) {
             sb.append("{" + record.getRemark() + "}");
         }
         sb.append(System.lineSeparator());

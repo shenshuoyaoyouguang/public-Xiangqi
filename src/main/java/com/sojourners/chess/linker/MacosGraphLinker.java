@@ -1,7 +1,6 @@
 package com.sojourners.chess.linker;
 
 import com.sojourners.chess.util.ShellUtils;
-import com.sojourners.chess.util.StringUtils;
 
 import java.awt.*;
 import java.awt.image.BufferedImage;
@@ -39,7 +38,7 @@ public class MacosGraphLinker extends AbstractGraphLinker {
                 "-e", "return {windowPosition, windowSize}"
         };
         String result = ShellUtils.exec(cmd);
-        if (StringUtils.isEmpty(result)) {
+        if (result == null || result.isEmpty()) {
             System.out.println(this.windowId + " getTargetWindowPosition failed");
             return new Rectangle();
         }

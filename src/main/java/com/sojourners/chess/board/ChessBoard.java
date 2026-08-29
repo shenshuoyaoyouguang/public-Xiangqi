@@ -3,7 +3,6 @@ package com.sojourners.chess.board;
 import com.sojourners.chess.config.Properties;
 import com.sojourners.chess.media.SoundPlayer;
 import com.sojourners.chess.util.PathUtils;
-import com.sojourners.chess.util.StringUtils;
 import com.sojourners.chess.util.XiangqiUtils;
 import javafx.scene.canvas.Canvas;
 
@@ -205,7 +204,7 @@ public class ChessBoard {
     }
 
     private void setNewBoard(String fenCode) {
-        if (StringUtils.isEmpty(fenCode)) {
+        if (fenCode == null || fenCode.isEmpty()) {
             initChessBoard(board);
         } else {
             setBoard(fenCode);

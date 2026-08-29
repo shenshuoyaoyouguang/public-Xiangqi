@@ -13,7 +13,7 @@
     <center>
         <TableView fx:id="table" editable="true" prefHeight="338.0" prefWidth="508.0" BorderPane.alignment="CENTER">
             <columns>
-                <TableColumn prefWidth="480.0" sortable="false" text="路径" />
+                <TableColumn fx:id="nameCol" prefWidth="480.0" sortable="false" text="路径" />
             </columns>
         </TableView>
     </center>

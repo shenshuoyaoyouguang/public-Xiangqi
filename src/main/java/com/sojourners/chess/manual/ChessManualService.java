@@ -2,7 +2,6 @@ package com.sojourners.chess.manual;
 
 import com.sojourners.chess.board.ChessBoard;
 import com.sojourners.chess.model.ManualRecord;
-import com.sojourners.chess.util.StringUtils;
 import com.sojourners.chess.util.XiangqiUtils;
 
 import java.io.File;
@@ -26,7 +25,7 @@ public interface ChessManualService {
         Character movedPiece = null;
         int fromI = -1, fromJ = -1, toI = -1, toJ = -1;
 
-        if (StringUtils.isNotEmpty(move) && mr.getId() > 0) {
+        if ((move != null && !move.isEmpty()) && mr.getId() > 0) {
             StringBuilder sb = new StringBuilder();
             ChessBoard.Step step = XiangqiUtils.translate(board, sb, move, false);
             mr.setCnMove(sb.toString());

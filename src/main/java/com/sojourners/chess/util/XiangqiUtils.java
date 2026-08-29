@@ -69,27 +69,8 @@ public class XiangqiUtils {
         switch (board[x1][y1]) {
             case 'r':
             case 'R': {
-                if (x1 != x2 && y1 != y2) {
-                    return false;
-                } else if (x1 == x2) {
-                    int start = y1 > y2 ? y2 : y1;
-                    int end = y1 > y2 ? y1 : y2;
-                    for (int i = start + 1; i < end; i++) {
-                        if (board[x1][i] != ' ') {
-                            return false;
-                        }
-                    }
-                    return true;
-                } else {
-                    int start = x1 > x2 ? x2 : x1;
-                    int end = x1 > x2 ? x1 : x2;
-                    for (int i = start + 1; i < end; i++) {
-                        if (board[i][y1] != ' ') {
-                            return false;
-                        }
-                    }
-                    return true;
-                }
+                if (x1 != x2 && y1 != y2) return false;
+                return lineClear(board, x1, y1, x2, y2);
             }
             case 'n':
             case 'N': {
@@ -151,29 +132,9 @@ public class XiangqiUtils {
             }
             case 'c':
             case 'C': {
-                if (x1 != x2 && y1 != y2) {
-                    return false;
-                } else if (x1 == x2) {
-                    int start = y1 > y2 ? y2 : y1;
-                    int end = y1 > y2 ? y1 : y2;
-                    int count = 0;
-                    for (int i = start + 1; i < end; i++) {
-                        if (board[x1][i] != ' ') {
-                            count++;
-                        }
-                    }
-                    return count == 1 && board[x2][y2] != ' ' || count == 0 && board[x2][y2] == ' ';
-                } else {
-                    int start = x1 > x2 ? x2 : x1;
-                    int end = x1 > x2 ? x1 : x2;
-                    int count = 0;
-                    for (int i = start + 1; i < end; i++) {
-                        if (board[i][y1] != ' ') {
-                            count++;
-                        }
-                    }
-                    return count == 1 && board[x2][y2] != ' ' || count == 0 && board[x2][y2] == ' ';
-                }
+                if (x1 != x2 && y1 != y2) return false;
+                int screens = lineObstructions(board, x1, y1, x2, y2);
+                return (screens == 0 && board[x2][y2] == ' ') || (screens == 1 && board[x2][y2] != ' ');
             }
             case 'p': {
                 if (x1 < 5) {
@@ -193,6 +154,37 @@ public class XiangqiUtils {
                 return false;
         }
 
+    }
+
+    /**
+     * 从 (x1,y1) 沿直线到 (x2,y2) 路径上是否无阻挡。调用方须保证两点在同一行或同一列。
+     */
+    private static boolean lineClear(char[][] board, int x1, int y1, int x2, int y2) {
+        if (x1 == x2) {
+            int lo = Math.min(y1, y2), hi = Math.max(y1, y2);
+            for (int i = lo + 1; i < hi; i++) if (board[x1][i] != ' ') return false;
+        } else {
+            int lo = Math.min(x1, x2), hi = Math.max(x1, x2);
+            for (int i = lo + 1; i < hi; i++) if (board[i][y1] != ' ') return false;
+        }
+        return true;
+    }
+
+    /**
+     * 从 (x1,y1) 沿直线到 (x2,y2) 路径上的子数。调用方须保证两点在同一行或同一列。
+     */
+    private static int lineObstructions(char[][] board, int x1, int y1, int x2, int y2) {
+        if (x1 == x2) {
+            int lo = Math.min(y1, y2), hi = Math.max(y1, y2);
+            int c = 0;
+            for (int i = lo + 1; i < hi; i++) if (board[x1][i] != ' ') c++;
+            return c;
+        } else {
+            int lo = Math.min(x1, x2), hi = Math.max(x1, x2);
+            int c = 0;
+            for (int i = lo + 1; i < hi; i++) if (board[i][y1] != ' ') c++;
+            return c;
+        }
     }
 
     public static boolean isJiang(char[][] board, boolean isRed) {
@@ -741,7 +733,7 @@ public class XiangqiUtils {
     }
 
     public static ChessBoard.Step translateCnMove(char[][] board, StringBuilder sb, String move) {
-        if (StringUtils.isEmpty(move) || move.length() < 4) {
+        if (move == null || move.isEmpty() || move.length() < 4) {
             sb.append(move);
             return null;
         }
@@ -856,7 +848,7 @@ public class XiangqiUtils {
     }
 
     public static ChessBoard.Step translate(char[][] board, StringBuilder sb, String move, boolean hasGo) {
-        if (StringUtils.isEmpty(move) || move.length() < 4) {
+        if (move == null || move.isEmpty() || move.length() < 4) {
             sb.append(move);
             return null;
         }

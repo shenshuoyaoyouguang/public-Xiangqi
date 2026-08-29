@@ -3,7 +3,6 @@ package com.sojourners.chess.openbook;
 import com.sojourners.chess.config.Properties;
 import com.sojourners.chess.model.BookData;
 import com.sojourners.chess.util.HttpUtils;
-import com.sojourners.chess.util.StringUtils;
 
 import java.net.URLEncoder;
 import java.util.ArrayList;
@@ -26,7 +25,7 @@ public class CloudOpenBook implements OpenBook {
             String result = HttpUtils.sendByGet(URL, content, Properties.getInstance().getCloudBookTimeout());
             System.out.println(result);
 
-            if (StringUtils.isNotEmpty(result) && result.contains("move")) {
+            if (result != null && !result.isEmpty() && result.contains("move")) {
 
                 String[] datas = result.split("\\|");
                 for (String data : datas) {

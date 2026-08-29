@@ -1,7 +1,6 @@
 package com.sojourners.chess.manual;
 
 import com.sojourners.chess.model.ManualRecord;
-import com.sojourners.chess.util.StringUtils;
 
 import java.io.*;
 import java.nio.charset.Charset;
@@ -354,7 +353,7 @@ public class XqfChessManualImpl implements ChessManualService {
 
             // 第0步是空着法，只包含注释
             if (pos == 0) {
-                if (StringUtils.isNotEmpty(comment)) {
+                if ((comment != null && !comment.isEmpty())) {
                     head.setRemark(comment);
                 }
                 pos += hasNext ? nextOffset : decode.length;
@@ -371,7 +370,7 @@ public class XqfChessManualImpl implements ChessManualService {
             // 创建新节点
             moveId++;
             ManualRecord step = new ManualRecord(moveId, move, "");
-            if (StringUtils.isNotEmpty(comment)) {
+            if ((comment != null && !comment.isEmpty())) {
                 step.setRemark(comment);
             }
 
@@ -544,7 +543,7 @@ public class XqfChessManualImpl implements ChessManualService {
 
         for (ManualRecord record : head.getList()) {
             String move = record.getMove();
-            if (StringUtils.isEmpty(move) || move.length() < 4) {
+            if ((move == null || move.isEmpty()) || move.length() < 4) {
                 continue;
             }
 
@@ -585,7 +584,7 @@ public class XqfChessManualImpl implements ChessManualService {
         for (int i = 0; i < parent.getList().size(); i++) {
             ManualRecord record = parent.getList().get(i);
             String move = record.getMove();
-            if (StringUtils.isEmpty(move) || move.length() < 4) {
+            if ((move == null || move.isEmpty()) || move.length() < 4) {
                 continue;
             }
 
