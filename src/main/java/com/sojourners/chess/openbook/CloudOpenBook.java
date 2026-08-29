@@ -10,7 +10,8 @@ import java.util.List;
 
 public class CloudOpenBook implements OpenBook {
 
-    private final static String URL = "http://www.chessdb.cn/chessdb.php";
+    // IT-9.4: 切换 HTTPS，明文请求消除
+    private final static String URL = "https://www.chessdb.cn/chessdb.php";
 
     private static final System.Logger log = System.getLogger(CloudOpenBook.class.getName());
 
@@ -28,7 +29,22 @@ public class CloudOpenBook implements OpenBook {
             String result = HttpUtils.sendByGet(URL, content, Properties.getInstance().getCloudBookTimeout());
             log.log(System.Logger.Level.DEBUG, "云库响应: fen=" + fenCode + " body=" + result);
 
-            if (result != null && !result.isEmpty() && result.contains("move")) {
+            // IT-9.5: 云库协议响应分类，静默失败消除
+            if (result == null || result.isEmpty()) {
+                log.log(System.Logger.Level.WARNING, "云库响应为空 fen=" + fenCode + " 耗时=" + (System.currentTimeMillis() - start) + "ms");
+                return list;
+            }
+            if (result.startsWith("error")) {
+                log.log(System.Logger.Level.WARNING, "云库返回错误 fen=" + fenCode + " body=" + result);
+                return list;
+            }
+            if (result.startsWith("unknown")) {
+                // 数据库不认识的局面，属正常情况（非错误），不记录库招
+                log.log(System.Logger.Level.INFO, "云库不认识该局面 fen=" + fenCode);
+                return list;
+            }
+
+            if (result.contains("move")) {
 
                 String[] datas = result.split("\\|");
                 for (String data : datas) {
