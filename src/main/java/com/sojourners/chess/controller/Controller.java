@@ -165,12 +165,14 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
     @FXML
     private TableView<BookData> bookTable;
 
-    private SimpleObjectProperty<Boolean> robotRed = new SimpleObjectProperty<>(false);
-    private SimpleObjectProperty<Boolean> robotBlack = new SimpleObjectProperty<>(false);
-    private SimpleObjectProperty<Boolean> robotAnalysis = new SimpleObjectProperty<>(false);
-    private SimpleObjectProperty<Boolean> isReverse = new SimpleObjectProperty<>(false);
-    private SimpleObjectProperty<Boolean> linkMode = new SimpleObjectProperty<>(false);
-    private SimpleObjectProperty<Boolean> useOpenBook = new SimpleObjectProperty<>(false);
+    // IT-7.1: 对局模式状态所有权迁入 GameSession，以下为兼容别名（PR5 收尾时清理）
+    private final GameSession session = new GameSession();
+    private SimpleObjectProperty<Boolean> robotRed = session.robotRedProperty();
+    private SimpleObjectProperty<Boolean> robotBlack = session.robotBlackProperty();
+    private SimpleObjectProperty<Boolean> robotAnalysis = session.robotAnalysisProperty();
+    private SimpleObjectProperty<Boolean> isReverse = session.isReverseProperty();
+    private SimpleObjectProperty<Boolean> linkMode = session.linkModeProperty();
+    private SimpleObjectProperty<Boolean> useOpenBook = session.useOpenBookProperty();
 
     /**
      * 走棋方
