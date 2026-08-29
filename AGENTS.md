@@ -6,10 +6,12 @@
 
 ```bash
 mvn compile            # 编译（验证改动的最低标准）
+mvn test               # 运行单元测试（src/test，JUnit 5）
+mvn verify             # 编译 + 测试 + 打包（CI 验证标准）
 mvn javafx:run         # 运行桌面程序
 ```
 
-无单元测试目录，验证靠 `mvn compile` + 手动运行。所有依赖都在 pom.xml，不要引入新的第三方库。
+测试在 `src/test/java`（JUnit 5，surefire 以 classpath 运行、无需写 module-info）。验证标准为 `mvn verify` + 关键行为有单测覆盖。除 JUnit（测试依赖）外不要引入新的第三方库。
 
 ## 模块系统（JPMS）
 
