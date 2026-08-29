@@ -54,7 +54,7 @@ import java.io.IOException;
 import java.util.Date;
 import java.util.List;
 
-public class Controller implements LinkerCallBack, ChessManualCallBack, EngineHost {
+public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
 
     private static final System.Logger log = System.getLogger(Controller.class.getName());
 
@@ -125,6 +125,9 @@ public class Controller implements LinkerCallBack, ChessManualCallBack, EngineHo
 
     // IT-7.2: 引擎域职责迁入 EngineController（引擎实例/分析/库表/趋势图）
     private EngineController engineController;
+
+    // IT-7.3: 连线域
+    private LinkController linkController;
 
     private ChessBoard board;
 
@@ -299,6 +302,26 @@ public class Controller implements LinkerCallBack, ChessManualCallBack, EngineHo
     @Override
     public AbstractGraphLinker getGraphLinker() {
         return graphLinker;
+    }
+
+    @Override
+    public boolean isThinking() {
+        return this.isThinking;
+    }
+
+    @Override
+    public void newChessBoardForLink(String fenCode) {
+        newChessBoard(fenCode);
+    }
+
+    @Override
+    public void reverseBoard() {
+        reverseButtonClick(null);
+    }
+
+    @Override
+    public void applyLinkMode(String value) {
+        setLinkMode(value);
     }
 
     @Override
@@ -592,6 +615,8 @@ public class Controller implements LinkerCallBack, ChessManualCallBack, EngineHo
         prop = Properties.getInstance();
         // IT-7.2: 引擎域
         engineController = new EngineController(this, listView, charPane, bookTable, infoShowLabel, timeShowLabel);
+        // IT-7.3: 连线域
+        linkController = new LinkController(this, linkComboBox);
         // 思考细节listView
         listView.setCellFactory(new Callback() {
             @Override
@@ -882,16 +907,8 @@ public class Controller implements LinkerCallBack, ChessManualCallBack, EngineHo
 
 
     private void initGraphLinker() {
-        try {
-            this.graphLinker = com.sun.jna.Platform.isWindows() ?
-                    new WindowsGraphLinker(this) : (com.sun.jna.Platform.isLinux() ?
-                    new LinuxGraphLinker(this) : new MacosGraphLinker(this));
-        } catch (Exception e) {
-            log.log(System.Logger.Level.ERROR, "初始化连线器失败", e);
-        }
-
-        linkComboBox.getItems().addAll("自动走棋", "观战模式");
-        linkComboBox.setValue("自动走棋");
+        linkController.initGraphLinker();
+        this.graphLinker = linkController.getGraphLinker();
     }
 
     private void refreshEngineComboBox() {
@@ -1075,51 +1092,7 @@ public class Controller implements LinkerCallBack, ChessManualCallBack, EngineHo
      * @param isReverse
      */
     @Override
-    public void linkerInitChessBoard(String fenCode, boolean isReverse) {
-        Platform.runLater(() -> {
-            newChessBoard(fenCode);
-            if (isReverse) {
-                reverseButtonClick(null);
-            }
-            setLinkMode(linkComboBox.getValue());
-        });
-    }
-
-    @Override
-    public char[][] getEngineBoard() {
-        return board.getBoard();
-    }
-
-    @Override
-    public boolean isThinking() {
-        return this.isThinking;
-    }
-
-    @Override
-    public boolean isWatchMode() {
-        return "观战模式".equals(linkComboBox.getValue());
-    }
-
-    @Override
-    public void linkerMove(int x1, int y1, int x2, int y2) {
-        Platform.runLater(() -> {
-            String move = board.move(x1, y1, x2, y2);
-            if (move != null) {
-                boolean red = XiangqiUtils.isRed(board.getBoard()[y2][x2]);
-                if (isWatchMode() && (!redGo && red || redGo && !red)) {
-                    log.log(System.Logger.Level.INFO, "连线识别行棋方可能错误，走子: " + move + "," + red + ", " + redGo);
-                    // 连线识别行棋方错误，自动切换行棋方
-                    switchPlayer(false);
-                } else {
-                    onMoveApplied(move);
-                }
-            } else {
-                log.log(System.Logger.Level.WARNING, "连线走子被拒绝（疑似送将或识别出非法着法），棋盘未更新: " + x1 + "," + y1 + " -> " + x2 + "," + y2);
-            }
-        });
-    }
-
-    private void switchPlayer(boolean f) {
+    public void switchPlayer(boolean f) {
         engineStop();
 
         graphLinker.pause();
