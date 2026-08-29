@@ -16,11 +16,11 @@ import java.util.Map;
  */
 public class ChessBoard {
 
-    private static BaseBoardRender boardRender;
+    private BaseBoardRender boardRender;
 
-    private static volatile char[][] board = new char[10][9];
+    private volatile char[][] board = new char[10][9];
 
-    private static char[][] copyBoard = new char[10][9];
+    private char[][] copyBoard = new char[10][9];
 
     private BoardSize boardSize;
 
@@ -33,15 +33,11 @@ public class ChessBoard {
     private boolean manualTip;
     private List<Step> manualList = new ArrayList<>();
 
-    private static SoundPlayer sound;
-
-    static {
-        sound = new SoundPlayer(PathUtils.getJarPath() + "sound/click.wav",
-                PathUtils.getJarPath() + "sound/move.wav",
-                PathUtils.getJarPath() + "sound/capture.wav",
-                PathUtils.getJarPath() + "sound/check.wav",
-                PathUtils.getJarPath() + "sound/win.wav");
-    }
+    private SoundPlayer sound = new SoundPlayer(PathUtils.getJarPath() + "sound/click.wav",
+            PathUtils.getJarPath() + "sound/move.wav",
+            PathUtils.getJarPath() + "sound/capture.wav",
+            PathUtils.getJarPath() + "sound/check.wav",
+            PathUtils.getJarPath() + "sound/win.wav");
 
     private Point remark;
 

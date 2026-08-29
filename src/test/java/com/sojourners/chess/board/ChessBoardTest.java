@@ -1,12 +1,8 @@
 package com.sojourners.chess.board;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-
-import java.lang.reflect.Field;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -14,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * ChessBoard 走子规则测试（IT-3.1）。
+ * ChessBoard 走子规则测试（IT-3.1）+ 实例化多局态验证（IT-10.3）。
  * ChessBoard 坐标：move/stepForEngine 的 x 为列 0~8、y 为行 0~9，内部存取为 board[y][x]；
  * 行 0 为黑方底线，行 9 为红方底线。测试不依赖图形栈（渲染已做空保护）。
  */
@@ -22,27 +18,14 @@ class ChessBoardTest {
 
     private static final String STANDARD_FEN_BODY = "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR";
 
-    @BeforeEach
-    void resetBoard() throws Exception {
-        // board 为全局静态状态（IT-10.1 将实例化），测试前重置为标准开局
-        char[][] fresh = new char[10][9];
-        ChessBoard.initChessBoard(fresh);
-        Field f = ChessBoard.class.getDeclaredField("board");
-        f.setAccessible(true);
-        f.set(null, fresh);
-    }
-
     private ChessBoard newBoard() {
         return new ChessBoard(null, ChessBoard.BoardSize.MIDDLE_BOARD, ChessBoard.BoardStyle.DEFAULT,
                 false, false, false, false, false, null);
     }
 
-    private static char[][] emptyBoard() {
-        char[][] board = new char[10][9];
-        for (char[] row : board) {
-            java.util.Arrays.fill(row, ' ');
-        }
-        return board;
+    private ChessBoard fenBoard(String fenCode) {
+        return new ChessBoard(null, ChessBoard.BoardSize.MIDDLE_BOARD, ChessBoard.BoardStyle.DEFAULT,
+                false, false, false, false, false, fenCode);
     }
 
     @Nested
@@ -86,14 +69,20 @@ class ChessBoardTest {
         @Test
         @DisplayName("空盘生成全 9 行")
         void emptyFen() {
-            char[][] board = emptyBoard();
+            char[][] board = new char[10][9];
+            for (char[] row : board) {
+                java.util.Arrays.fill(row, ' ');
+            }
             assertEquals("9/9/9/9/9/9/9/9/9/9", ChessBoard.fenCode(board, null));
         }
 
         @Test
         @DisplayName("连续空位压缩计数")
         void gapCompression() {
-            char[][] board = emptyBoard();
+            char[][] board = new char[10][9];
+            for (char[] row : board) {
+                java.util.Arrays.fill(row, ' ');
+            }
             board[0][0] = 'k';
             board[0][8] = 'r';
             assertEquals("k7r/9/9/9/9/9/9/9/9/9", ChessBoard.fenCode(board, null));
@@ -142,9 +131,8 @@ class ChessBoardTest {
         void capture() {
             ChessBoard cb = newBoard();
             cb.move(0, 0, 0, 6);
-            char[][] board = currentBoard();
-            assertEquals('r', board[6][0], "黑车落到兵位");
-            assertEquals(' ', board[0][0], "原位清空");
+            assertEquals('r', cb.getBoard()[6][0], "黑车落到兵位");
+            assertEquals(' ', cb.getBoard()[0][0], "原位清空");
         }
 
         @Test
@@ -159,20 +147,14 @@ class ChessBoardTest {
         @Test
         @DisplayName("送将被拒：返回 null 且局面还原")
         void suicideMoveRejected() {
-            ChessBoard cb = newBoard();
-            // 构造对脸险局：黑将(0,4) 红帅(9,4) 同列，黑车(5,4) 是列 4 唯一遮挡
-            char[][] board = emptyBoard();
-            board[0][4] = 'k';
-            board[5][4] = 'r';
-            board[9][4] = 'K';
-            setStaticBoard(board);
+            // 对脸险局：黑将(0,4) 红帅(9,4) 同列，黑车(5,4) 是列 4 唯一遮挡
+            ChessBoard cb = fenBoard("4k4/9/9/9/9/4r4/9/9/9/4K4 b");
 
             String result = cb.move(4, 5, 5, 5);
             assertNull(result, "黑车横移让开列 4 形成对脸，属送将");
 
-            char[][] after = currentBoard();
-            assertEquals('r', after[5][4], "走子被还原");
-            assertEquals(' ', after[5][5]);
+            assertEquals('r', cb.getBoard()[5][4], "走子被还原");
+            assertEquals(' ', cb.getBoard()[5][5]);
         }
 
         @Test
@@ -186,18 +168,12 @@ class ChessBoardTest {
         @Test
         @DisplayName("绝杀后走子仍返回坐标（胜负判定由上层处理）")
         void mateMove() {
-            ChessBoard cb = newBoard();
-            // 简单验证 isSha 分支不阻断走子：黑车吃红仕后局面更新
-            char[][] board = emptyBoard();
-            board[0][3] = 'k';
-            board[0][0] = 'r';
-            board[9][3] = 'A';
-            board[9][4] = 'K';
-            setStaticBoard(board);
+            // 黑车 r(0,0)、黑将 k(0,3)、红仕 A(9,3)、红帅 K(9,4)
+            ChessBoard cb = fenBoard("r2k4/9/9/9/9/9/9/9/9/3AK4 b");
             // 黑车 (x=0,y=0) 下沉吃仕 (x=0,y=9)
             String engine = cb.move(0, 0, 0, 9);
             assertEquals("a9a0", engine);
-            assertEquals('r', currentBoard()[9][0]);
+            assertEquals('r', cb.getBoard()[9][0]);
         }
     }
 
@@ -206,35 +182,46 @@ class ChessBoardTest {
     class TacticTest {
 
         @Test
-        @DisplayName("标准开局枚举包含炮打马着法且不含非法着法")
+        @DisplayName("标准开局枚举包含典型着法且不含非法着法")
         void openingTactics() {
             ChessBoard cb = newBoard();
-            List<String> tactics = cb.getTacticList(true);
+            var tactics = cb.getTacticList(true);
             assertFalse(tactics.isEmpty());
             assertTrue(tactics.contains("h2e2"), "开局红炮 h2 平 e2（炮二平五）");
             assertTrue(tactics.contains("h0g2"), "开局红马 h0 跳 g2（马二进三）");
-            assertTrue(tactics.size() == 44, "标准开局红方 44 步，实际: " + tactics.size());
             assertFalse(tactics.contains("a0a3"), "红车被己方兵阻挡不能直达 a3");
+            assertEquals(44, tactics.size(), "标准开局红方 44 步");
         }
     }
 
-    private static char[][] currentBoard() {
-        try {
-            Field f = ChessBoard.class.getDeclaredField("board");
-            f.setAccessible(true);
-            return (char[][]) f.get(null);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException(e);
-        }
-    }
+    @Nested
+    @DisplayName("多局态独立性（IT-10.3 去 static 验证）")
+    class MultiInstanceTest {
 
-    private static void setStaticBoard(char[][] board) {
-        try {
-            Field f = ChessBoard.class.getDeclaredField("board");
-            f.setAccessible(true);
-            f.set(null, board);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException(e);
+        @Test
+        @DisplayName("两个实例局面互不干扰")
+        void twoBoardsIndependent() {
+            ChessBoard b1 = newBoard();
+            ChessBoard b2 = newBoard();
+
+            b1.move(0, 0, 0, 6); // b1 黑车吃兵
+
+            assertEquals('r', b1.getBoard()[6][0], "b1 局面已更新");
+            assertEquals('P', b2.getBoard()[6][0], "b2 局面不受 b1 影响");
+            assertEquals('P', b2.getBoard()[6][4], "b2 保持标准开局");
+        }
+
+        @Test
+        @DisplayName("不同 FEN 实例各自独立")
+        void differentFenInstances() {
+            ChessBoard b1 = fenBoard("4k4/9/9/9/9/4r4/9/9/9/4K4 b");
+            ChessBoard b2 = newBoard();
+
+            assertEquals('r', b1.getBoard()[5][4]);
+            assertEquals('k', b2.getBoard()[0][4], "b2 保持标准开局");
+
+            b1.move(4, 5, 3, 5); // b1 黑车平移
+            assertEquals('r', b2.getBoard()[0][0], "b2 黑车原位不动");
         }
     }
 }
