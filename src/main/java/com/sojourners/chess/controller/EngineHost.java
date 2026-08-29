@@ -1,7 +1,7 @@
 package com.sojourners.chess.controller;
 
 import com.sojourners.chess.board.ChessBoard;
-import com.sojourners.chess.controller.handle.ChessManualHandle;
+import com.sojourners.chess.controller.handle.ManualController;
 import com.sojourners.chess.linker.AbstractGraphLinker;
 
 /**
@@ -16,7 +16,7 @@ public interface EngineHost {
 
     GameSession getSession();
 
-    ChessManualHandle getChessManualHandle();
+    ManualController getChessManualHandle();
 
     AbstractGraphLinker getGraphLinker();
 

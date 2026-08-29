@@ -31,7 +31,7 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
 
-public class ChessManualHandle {
+public class ManualController {
 
     private ChessManualCallBack cb;
 
@@ -85,7 +85,7 @@ public class ChessManualHandle {
         manualServices.put("xqf", new XqfChessManualImpl());
     }
 
-    public ChessManualHandle(BorderPane chessManualPane, CheckMenuItem menuOfChessNotation, CheckMenuItem menuOfShowTactic, TreeView notationTree,
+    public ManualController(BorderPane chessManualPane, CheckMenuItem menuOfChessNotation, CheckMenuItem menuOfShowTactic, TreeView notationTree,
                              Label manualTitleLabel, TableView recordTable, ListView subRecordTable, TextArea remarkText,
                              Button manualBackButton, Button manualDeleteButton, Button manualDownButton, Button manualFinalButton,
                              Button manualForwardButton, Button manualFrontButton, Button manualPlayButton, Button manualUpButton,

@@ -4,7 +4,7 @@ import com.sojourners.chess.App;
 import com.sojourners.chess.board.ChessBoard;
 import com.sojourners.chess.config.Properties;
 import com.sojourners.chess.controller.handle.ChessManualCallBack;
-import com.sojourners.chess.controller.handle.ChessManualHandle;
+import com.sojourners.chess.controller.handle.ManualController;
 import com.sojourners.chess.enginee.Engine;
 import com.sojourners.chess.enginee.EngineCallBack;
 import com.sojourners.chess.linker.*;
@@ -325,7 +325,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
     }
 
     @Override
-    public com.sojourners.chess.controller.handle.ChessManualHandle getChessManualHandle() {
+    public com.sojourners.chess.controller.handle.ManualController getChessManualHandle() {
         return chessManualHandle;
     }
 
@@ -666,7 +666,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
         // line chart
         engineController.initLineChart();
         // init chess manual
-        chessManualHandle = new ChessManualHandle(chessManualPane, menuOfChessNotation, menuOfShowTactic, notationTree,
+        chessManualHandle = new ManualController(chessManualPane, menuOfChessNotation, menuOfShowTactic, notationTree,
                 manualTitleLabel, recordTable, subRecordTable, remarkText,
                 manualBackButton, manualDeleteButton, manualDownButton, manualFinalButton,
                 manualForwardButton, manualFrontButton, manualPlayButton, manualUpButton,
@@ -1116,7 +1116,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
     }
 
     // ------------- 棋谱管理 start -----------------
-    private ChessManualHandle chessManualHandle;
+    private ManualController chessManualHandle;
     @FXML
     private BorderPane chessManualPane;
     @FXML
