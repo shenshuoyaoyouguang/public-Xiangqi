@@ -1158,31 +1158,62 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
         }
     }
 
+    // 分析 UI 刷新节流（IT-4.4 #67）：引擎每行 info 都回调 thinkDetail，
+    // 高频 Platform.runLater 会洪泛 FX 线程抢占 CPU，压低同机引擎 NPS。
+    // 150ms 窗口内的中间帧合并为 pending，窗口结束后经 FX 队列补提交，保证最终帧不丢
+    private long lastThinkUpdateTime = 0;
+    private ThinkData pendingTd;
+    private boolean pendingScheduled = false;
+
     @Override
     public void thinkDetail(ThinkData td) {
         if (redGo && robotRed.getValue() || !redGo && robotBlack.getValue() || robotAnalysis.getValue()) {
             td.generate(redGo, isReverse.getValue(), board);
             if (td.getValid()) {
-                Platform.runLater(() -> {
-                    listView.getItems().addFirst(td);
-                    if (listView.getItems().size() > 128) {
-                        listView.getItems().removeLast();
+                long now = System.currentTimeMillis();
+                if (now - lastThinkUpdateTime < 150) {
+                    pendingTd = td;
+                    if (!pendingScheduled) {
+                        pendingScheduled = true;
+                        Platform.runLater(this::flushPendingThinkDetail);
                     }
-
-                    if (prop.isLinkShowInfo()) {
-                        infoShowLabel.setText(td.getTitle() + " | " + td.getBody());
-                        setScoreStyle(infoShowLabel, td.getScore());
-                        timeShowLabel.setText(getTimeStrategyString());
-                    }
-
-                    board.setTip(td.getDetail().get(0), td.getDetail().size() > 1 ? td.getDetail().get(1) : null, td.getPv());
-
-                    if (td.getPv() == 1) {
-                        chessManualHandle.setScore(td.getScore(), td.getMate());
-                    }
-                });
+                    return;
+                }
+                lastThinkUpdateTime = now;
+                submitThinkDetail(td);
             }
         }
+    }
+
+    private void flushPendingThinkDetail() {
+        pendingScheduled = false;
+        ThinkData t = pendingTd;
+        pendingTd = null;
+        if (t != null) {
+            lastThinkUpdateTime = System.currentTimeMillis();
+            submitThinkDetail(t);
+        }
+    }
+
+    private void submitThinkDetail(ThinkData td) {
+        Platform.runLater(() -> {
+            listView.getItems().addFirst(td);
+            if (listView.getItems().size() > 128) {
+                listView.getItems().removeLast();
+            }
+
+            if (prop.isLinkShowInfo()) {
+                infoShowLabel.setText(td.getTitle() + " | " + td.getBody());
+                setScoreStyle(infoShowLabel, td.getScore());
+                timeShowLabel.setText(getTimeStrategyString());
+            }
+
+            board.setTip(td.getDetail().get(0), td.getDetail().size() > 1 ? td.getDetail().get(1) : null, td.getPv());
+
+            if (td.getPv() == 1) {
+                chessManualHandle.setScore(td.getScore(), td.getMate());
+            }
+        });
     }
 
     private String getTimeStrategyString() {

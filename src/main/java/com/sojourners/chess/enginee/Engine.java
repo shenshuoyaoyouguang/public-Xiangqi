@@ -20,6 +20,9 @@ public class Engine {
 
     private static final System.Logger log = System.getLogger(Engine.class.getName());
 
+    // 预编译数字匹配正则：引擎输出每行会解析十余个字段，避免每字段重复编译 Pattern 抢占 CPU（IT-4.4 #67）
+    private static final java.util.regex.Pattern NUMERIC_PATTERN = java.util.regex.Pattern.compile("^-?\\d+$");
+
     private Process process;
 
     private String protocol;
@@ -234,7 +237,7 @@ public class Engine {
                 if (flag == 6) {
                     detail.add(str[i]);
                 } else {
-                    if (str[i].matches("^-?\\d+$")) {
+                    if (NUMERIC_PATTERN.matcher(str[i]).matches()) {
                         if (flag == 1) {
                             td.setNps(Long.parseLong(str[i]));
 
