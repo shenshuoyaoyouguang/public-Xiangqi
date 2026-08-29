@@ -1,0 +1,6 @@
+# Conventional Commits 模板（IT-1.5）
+# 格式: <type>(<scope>): <subject>
+# type: feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert
+# 示例: feat(ui): 局势图支持关键节点标注
+#       fix(engine): 修复 UCCI 协议 setoption 参数顺序
+# <subject> 为祈使句/动宾短语，不加句号
