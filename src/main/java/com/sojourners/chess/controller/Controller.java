@@ -54,7 +54,7 @@ import java.io.IOException;
 import java.util.Date;
 import java.util.List;
 
-public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCallBack {
+public class Controller implements LinkerCallBack, ChessManualCallBack, EngineHost {
 
     private static final System.Logger log = System.getLogger(Controller.class.getName());
 
@@ -123,7 +123,8 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
 
     private Properties prop;
 
-    private Engine engine;
+    // IT-7.2: 引擎域职责迁入 EngineController（引擎实例/分析/库表/趋势图）
+    private EngineController engineController;
 
     private ChessBoard board;
 
@@ -148,7 +149,6 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
 
     @FXML
     private BorderPane charPane;
-    private XYChart.Series lineChartSeries;
 
     @FXML
     private Button immediateButton;
@@ -187,7 +187,6 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
     /**
      * 变招列表
      */
-    private List<String> tacticList;
 
     @FXML
     public void newButtonClick(ActionEvent event) {
@@ -285,40 +284,53 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
     }
 
     private void engineStop() {
-        if (engine != null) {
-            engine.stop();
-        }
+        engineController.stop();
+    }
+
+    private void engineGo() {
+        engineController.go();
+    }
+
+    @Override
+    public void setThinking(boolean thinking) {
+        this.isThinking = thinking;
+    }
+
+    @Override
+    public AbstractGraphLinker getGraphLinker() {
+        return graphLinker;
+    }
+
+    @Override
+    public com.sojourners.chess.controller.handle.ChessManualHandle getChessManualHandle() {
+        return chessManualHandle;
+    }
+
+    @Override
+    public GameSession getSession() {
+        return session;
+    }
+
+    @Override
+    public boolean isRedGo() {
+        return redGo;
+    }
+
+    @Override
+    public ChessBoard getBoard() {
+        return board;
     }
 
     @FXML
     public void immediateButtonClick(ActionEvent event) {
         if (redGo && robotRed.getValue() || !redGo && robotBlack.getValue()) {
-            if (engine != null) {
-                engine.moveNow();
-            }
+            engineController.moveNow();
         }
     }
 
     @FXML
     public void changeTacticButtonClick(ActionEvent event) {
-        if (robotRed.getValue() && redGo || robotBlack.getValue() && !redGo || robotAnalysis.getValue()) {
-            engineStop();
-            if (tacticList == null || tacticList.size() <= 1) {
-                tacticList = board.getTacticList(redGo);
-            }
-            if (!listView.getItems().isEmpty()) {
-                for (ThinkData td : listView.getItems()) {
-                    if (td.getPv() == 1) {
-                        tacticList.remove(td.getDetail().get(0));
-                        break;
-                    }
-                }
-            }
-            engine.setThreadNum(prop.getThreadNum());
-            engine.setHashSize(prop.getHashSize());
-            engine.setAnalysisModel(robotAnalysis.getValue() ? Engine.AnalysisModel.INFINITE : prop.getAnalysisModel(), prop.getAnalysisValue());
-            engine.analysis(chessManualHandle.getFenCode(), chessManualHandle.getMoveList(), tacticList);
-        }
+        engineController.changeTactic();
     }
 
     @FXML
@@ -334,11 +346,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
         // 如果引擎被卸载，则关闭
         if ((prop.getEngineName() == null || prop.getEngineName().isEmpty())) {
             resetRobotModes();
-            // 关闭引擎
-            if (engine != null) {
-                engine.close();
-                engine = null;
-            }
+            engineController.unloadEngine();
         }
     }
 
@@ -360,7 +368,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
      * 黑/红启用时仅在轮到该方行棋时启动引擎；取消时若为该方行棋则停止引擎。
      */
     private void toggleMode(SimpleObjectProperty<Boolean> mode, boolean isAnalysis) {
-        if (engine == null) {
+        if (!engineController.isLoaded()) {
             DialogUtils.showWarningDialog("提示", "引擎未加载");
             return;
         }
@@ -407,27 +415,6 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
         linkMode.setValue(false);
     }
 
-    private void engineGo() {
-        if (engine == null) {
-            DialogUtils.showWarningDialog("提示", "引擎未加载");
-            return;
-        }
-
-        if (robotRed.getValue() && redGo || robotBlack.getValue() && !redGo) {
-            this.isThinking = true;
-        } else {
-            this.isThinking = false;
-        }
-
-        // 重置变招列表
-        tacticList = null;
-
-        engine.setThreadNum(prop.getThreadNum());
-        engine.setHashSize(prop.getHashSize());
-        engine.setAnalysisModel(robotAnalysis.getValue() ? Engine.AnalysisModel.INFINITE : prop.getAnalysisModel(), prop.getAnalysisValue());
-        engine.analysis(chessManualHandle.getFenCode(), chessManualHandle.getMoveList(), this.board.getBoard(), redGo);
-    }
-
     @FXML
     public void canvasClick(MouseEvent event) {
 
@@ -436,7 +423,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
                     redGo && !robotRed.getValue(), !redGo && !robotBlack.getValue());
 
             if (move != null) {
-                goCallBack(move);
+                onMoveApplied(move);
             }
 
             BoardContextMenu.getInstance().hide();
@@ -447,7 +434,9 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
         }
 
     }
-    private void goCallBack(String move) {
+
+    @Override
+    public void onMoveApplied(String move) {
         // 记录棋谱
         List<String> nextList = chessManualHandle.boardMove(move, board.translate(move, true));
         board.setManualList(nextList);
@@ -457,46 +446,19 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
         redGo = !redGo;
         // 触发引擎走棋
         if (redGo && robotRed.getValue() || !redGo && robotBlack.getValue() || robotAnalysis.getValue()) {
-            engineGo();
+            engineController.go();
         } else {
-            doOpenBook();
+            engineController.queryOpenBook();
         }
     }
 
     @Override
     public void refreshLineChart() {
-        List<XYChart.Data> oldList = lineChartSeries.getData();
-        List<XYChart.Data> newList = chessManualHandle.getScoreList();
-        int i = 0;
-        while (i < oldList.size() && i < newList.size()) {
-            XYChart.Data o = oldList.get(i);
-            XYChart.Data n = newList.get(i);
-            if (!o.getXValue().equals(n.getXValue()) || !o.getYValue().equals(n.getYValue())) {
-                for (int j = oldList.size() - 1; j >= i; j--) {
-                    oldList.remove(j);
-                }
-                break;
-            }
-            i++;
-        }
-        if (i < oldList.size()) {
-            for (int j = oldList.size() - 1; j >= i; j--) {
-                oldList.remove(j);
-            }
-        } else if (i < newList.size()) {
-            oldList.addAll(newList.subList(i, newList.size()));
-        }
+        engineController.refreshLineChart();
     }
 
     private void doOpenBook() {
-        if (useOpenBook.getValue()) {
-            Thread.startVirtualThread(() -> {
-                List<BookData> results = OpenBookManager.getInstance().queryBook(board.getBoard(), redGo, chessManualHandle.getP() / 2 >= Properties.getInstance().getOffManualSteps());
-                this.showBookResults(results);
-            });
-        } else {
-            this.bookTable.getItems().clear();
-        }
+        engineController.queryOpenBook();
     }
 
     @FXML
@@ -612,7 +574,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
 
     @FXML
     private void linkButtonClick(ActionEvent e) {
-        if (engine == null) {
+        if (!engineController.isLoaded()) {
             DialogUtils.showWarningDialog("提示", "引擎未加载");
             return;
         }
@@ -625,30 +587,11 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
         }
     }
 
-    private void initLineChart() {
-        final NumberAxis xAxis = new NumberAxis();
-        final NumberAxis yAxis = new NumberAxis(-1000, 1000, 500);
-        xAxis.setTickLabelsVisible(false);
-        xAxis.setTickMarkVisible(false);
-        xAxis.setMinorTickVisible(false);
-        yAxis.setTickMarkVisible(false);
-        yAxis.setMinorTickVisible(false);
-
-        LineChart<Number,Number> lineChart = new LineChart<>(xAxis, yAxis);
-        lineChart.setMinHeight(100);
-        lineChart.setLegendVisible(false);
-        lineChart.setCreateSymbols(false);
-        lineChart.setVerticalGridLinesVisible(false);
-        lineChart.getStylesheets().add(this.getClass().getResource("/style/table.css").toString());
-
-        lineChartSeries = new XYChart.Series();
-        lineChart.getData().add(lineChartSeries);
-
-        charPane.setCenter(lineChart);
-    }
     public void initialize() {
         // 读取配置
         prop = Properties.getInstance();
+        // IT-7.2: 引擎域
+        engineController = new EngineController(this, listView, charPane, bookTable, infoShowLabel, timeShowLabel);
         // 思考细节listView
         listView.setCellFactory(new Callback() {
             @Override
@@ -662,7 +605,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
 
                             Label title = new Label();
                             title.setText(item.getTitle());
-                            setScoreStyle(title, item.getScore());
+                            engineController.setScoreStyle(title, item.getScore());
                             box.getChildren().add(title);
 
                             Label body = new Label();
@@ -684,7 +627,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
         // 棋盘
         initChessBoard();
         // 库招表
-        initBookTable();
+        engineController.initBookTable();
         // 引擎view
         initEngineView();
         // 连线器
@@ -696,7 +639,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
         // canvas drag listener
         initCanvasDragListener();
         // line chart
-        initLineChart();
+        engineController.initLineChart();
         // init chess manual
         chessManualHandle = new ChessManualHandle(chessManualPane, menuOfChessNotation, menuOfShowTactic, notationTree,
                 manualTitleLabel, recordTable, subRecordTable, remarkText,
@@ -709,7 +652,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
         // 初始化棋局
         newChessBoard(null);
         // 加载引擎
-        loadEngine(prop.getEngineName());
+        engineController.loadEngine(prop.getEngineName());
     }
 
     private void importFromBufferImage(BufferedImage img) {
@@ -756,25 +699,6 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
         splitPane.getDividers().get(0).positionProperty().addListener((observableValue, number, t1) -> {
             board.autoFitSize(borderPane.getWidth(), borderPane.getHeight(), t1.doubleValue());
         });
-    }
-
-    private void initBookTable() {
-        TableColumn moveCol = bookTable.getColumns().get(0);
-        moveCol.setCellValueFactory(new PropertyValueFactory<BookData, String>("word"));
-        TableColumn scoreCol = bookTable.getColumns().get(1);
-        scoreCol.setCellValueFactory(new PropertyValueFactory<BookData, Integer>("score"));
-        TableColumn winRateCol = bookTable.getColumns().get(2);
-        winRateCol.setCellValueFactory(new PropertyValueFactory<BookData, Double>("winRate"));
-        TableColumn winNumCol = bookTable.getColumns().get(3);
-        winNumCol.setCellValueFactory(new PropertyValueFactory<BookData, Integer>("winNum"));
-        TableColumn drawNumCol = bookTable.getColumns().get(4);
-        drawNumCol.setCellValueFactory(new PropertyValueFactory<BookData, Integer>("drawNum"));
-        TableColumn loseNumCol = bookTable.getColumns().get(5);
-        loseNumCol.setCellValueFactory(new PropertyValueFactory<BookData, Integer>("loseNum"));
-        TableColumn noteCol = bookTable.getColumns().get(6);
-        noteCol.setCellValueFactory(new PropertyValueFactory<BookData, String>("note"));
-        TableColumn sourceCol = bookTable.getColumns().get(7);
-        sourceCol.setCellValueFactory(new PropertyValueFactory<BookData, String>("source"));
     }
 
     public void initStage() {
@@ -839,7 +763,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
         initBoardContextMenu();
         // 状态栏
         this.infoShowLabel.prefWidthProperty().bind(statusToolBar.widthProperty().subtract(120));
-        this.timeShowLabel.setText(getTimeStrategyString());
+        engineController.refreshTimeStrategyLabel();
         this.statusToolBar.setVisible(prop.isLinkShowInfo());
     }
 
@@ -924,7 +848,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
         engineStop();
         // 绘制棋盘
         board = new ChessBoard(this.canvas, prop.getBoardSize(), prop.getBoardStyle(), prop.isStepTip(), prop.isManualTip(),
-                engine != null && engine.getMultiPV() > 1, prop.isStepSound(), prop.isShowNumber(), fenCode);
+                engineController.isLoaded() && engineController.getMultiPV() > 1, prop.isStepSound(), prop.isShowNumber(), fenCode);
         // 设置局面
         redGo = (fenCode == null || fenCode.isEmpty()) ? true : fenCode.contains("w");
         fenCode = board.fenCode(redGo);
@@ -1020,7 +944,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
                         stopGraphLink();
                     }
                     // 加载新引擎
-                    loadEngine(t1);
+                    engineController.loadEngine(t1);
                 }
             }
         });
@@ -1104,46 +1028,8 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
         }
     }
 
-    private void loadEngine(String name) {
-        try {
-            if ((name != null && !name.isEmpty())) {
-                for (EngineConfig ec : prop.getEngineConfigList()) {
-                    if (name.equals(ec.getName())) {
-                        if (engine != null) {
-                            engine.close();
-                        }
-                        engine = new Engine(ec, this);
-                        board.showMultiPV(engine.getMultiPV() > 1);
-                        return;
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.log(System.Logger.Level.ERROR, "加载引擎失败", e);
-        }
-    }
-
-    /**
-     * 连线模式下自动点击走棋
-     * @param step
-     */
-    private void trickAutoClick(ChessBoard.Step step) {
-        if (step != null) {
-            int x1 = step.getStart().getX(), y1 = step.getStart().getY();
-            int x2 = step.getEnd().getX(), y2 = step.getEnd().getY();
-            if (robotBlack.getValue()) {
-                y1 = 9 - y1;
-                y2 = 9 - y2;
-                x1 = 8 - x1;
-                x2 = 8 - x2;
-            }
-            graphLinker.autoClick(x1, y1, x2, y2);
-        }
-        this.isThinking = false;
-    }
-
     @Override
-    public void bestMove(String first, String second) {
+    public void onEngineBestMove(String first, String second) {
         if (redGo && robotRed.getValue() || !redGo && robotBlack.getValue()) {
             ChessBoard.Step s = board.stepForBoard(first);
 
@@ -1151,128 +1037,23 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
                 board.move(s.getStart().getX(), s.getStart().getY(), s.getEnd().getX(), s.getEnd().getY());
                 board.setTip(second, null, 1);
 
-                goCallBack(first);
+                onMoveApplied(first);
             });
 
             if (linkMode.getValue()) {
-                trickAutoClick(s);
+                engineController.autoClickTactic(s);
             }
-        }
-    }
-
-    // 分析 UI 刷新节流（IT-4.4 #67）：引擎每行 info 都回调 thinkDetail，
-    // 高频 Platform.runLater 会洪泛 FX 线程抢占 CPU，压低同机引擎 NPS。
-    // 150ms 窗口内的中间帧合并为 pending，窗口结束后经 FX 队列补提交，保证最终帧不丢
-    private long lastThinkUpdateTime = 0;
-    private ThinkData pendingTd;
-    private boolean pendingScheduled = false;
-
-    @Override
-    public void thinkDetail(ThinkData td) {
-        if (redGo && robotRed.getValue() || !redGo && robotBlack.getValue() || robotAnalysis.getValue()) {
-            td.generate(redGo, isReverse.getValue(), board);
-            if (td.getValid()) {
-                long now = System.currentTimeMillis();
-                if (now - lastThinkUpdateTime < 150) {
-                    pendingTd = td;
-                    if (!pendingScheduled) {
-                        pendingScheduled = true;
-                        Platform.runLater(this::flushPendingThinkDetail);
-                    }
-                    return;
-                }
-                lastThinkUpdateTime = now;
-                submitThinkDetail(td);
-            }
-        }
-    }
-
-    private void flushPendingThinkDetail() {
-        pendingScheduled = false;
-        ThinkData t = pendingTd;
-        pendingTd = null;
-        if (t != null) {
-            lastThinkUpdateTime = System.currentTimeMillis();
-            submitThinkDetail(t);
-        }
-    }
-
-    private void submitThinkDetail(ThinkData td) {
-        Platform.runLater(() -> {
-            listView.getItems().addFirst(td);
-            if (listView.getItems().size() > 128) {
-                listView.getItems().removeLast();
-            }
-
-            if (prop.isLinkShowInfo()) {
-                infoShowLabel.setText(td.getTitle() + " | " + td.getBody());
-                setScoreStyle(infoShowLabel, td.getScore());
-                timeShowLabel.setText(getTimeStrategyString());
-            }
-
-            board.setTip(td.getDetail().get(0), td.getDetail().size() > 1 ? td.getDetail().get(1) : null, td.getPv());
-
-            if (td.getPv() == 1) {
-                chessManualHandle.setScore(td.getScore(), td.getMate());
-            }
-        });
-    }
-
-    private String getTimeStrategyString() {
-        switch (prop.getAnalysisModel()) {
-            case Engine.AnalysisModel.FIXED_TIME:
-                return "固定时间" + prop.getAnalysisValue() / 1000d + "秒";
-            case Engine.AnalysisModel.FIXED_STEPS:
-                return "固定深度" + prop.getAnalysisValue() + "层";
-            case Engine.AnalysisModel.FIXED_NODES:
-                long nodes = prop.getAnalysisValue();
-                if (nodes > 1000) {
-                    nodes /= 1000;
-                    return "固定节点" + nodes + "K个";
-                } else {
-                    return "固定节点" + nodes + "个";
-                }
-            default:
-                return "";
-        }
-    }
-
-    private void setScoreStyle(Label label, double score) {
-        label.getStyleClass().removeAll("positive-score", "negative-score");
-        label.getStyleClass().add(score >= 0 ? "positive-score" : "negative-score");
-    }
-
-    @Override
-    public void showBookResults(List<BookData> list) {
-        this.bookTable.getItems().clear();
-        for (BookData bd : list) {
-            String move = bd.getMove();
-            bd.setWord(board.translate(move, false));
-            this.bookTable.getItems().add(bd);
         }
     }
 
     @FXML
     public void bookTableClick(MouseEvent event) {
-        if (event.getButton() == MouseButton.PRIMARY && event.getClickCount() == 2) {
-            if (redGo && !robotRed.getValue() || !redGo && !robotBlack.getValue() ||robotAnalysis.getValue()) {
-                BookData bd = bookTable.getSelectionModel().getSelectedItem();
-                if (bd == null) {
-                    return;
-                }
-                Platform.runLater(() -> {
-                    board.move(bd.getMove());
-                    goCallBack(bd.getMove());
-                });
-            }
-        }
+        engineController.onBookTableClick(event);
     }
 
     @FXML
     public void exit() {
-        if (engine != null) {
-            engine.close();
-        }
+        engineController.unloadEngine();
 
         OpenBookManager.getInstance().close();
 
@@ -1330,7 +1111,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
                     // 连线识别行棋方错误，自动切换行棋方
                     switchPlayer(false);
                 } else {
-                    goCallBack(move);
+                    onMoveApplied(move);
                 }
             } else {
                 log.log(System.Logger.Level.WARNING, "连线走子被拒绝（疑似送将或识别出非法着法），棋盘未更新: " + x1 + "," + y1 + " -> " + x2 + "," + y2);
@@ -1427,7 +1208,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
     }
     @FXML
     void scoreButtonClick(ActionEvent event) {
-        if (engine == null) {
+        if (!engineController.isLoaded()) {
             DialogUtils.showWarningDialog("提示", "引擎未加载");
             return;
         }
