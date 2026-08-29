@@ -121,9 +121,6 @@
                 <configuration>
                     <!-- 项目为 JPMS 模块，测试走 classpath（JUnit 无需写入 module-info） -->
                     <useModulePath>false</useModulePath>
-                    <!-- IT-3.3: 覆盖率 agent。destfile 用相对路径保持 fork 命令行全 ASCII，
-                         规避中文项目路径经 cmd.exe 传递导致 exec 写不出的问题 -->
-                    <argLine>-javaagent:${settings.localRepository}/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=target/jacoco.exec</argLine>
                 </configuration>
             </plugin>
             <plugin>
@@ -131,6 +128,12 @@
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>0.8.12</version>
                 <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
                     <execution>
                         <id>coverage-check</id>
                         <phase>verify</phase>
