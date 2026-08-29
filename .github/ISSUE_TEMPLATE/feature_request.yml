@@ -1,0 +1,35 @@
+name: 功能建议 (Feature Request)
+description: 提出新功能或改进建议
+labels: [ "enhancement" ]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 要解决的问题或使用场景
+      description: 描述当前遇到的限制或痛点
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议的方案
+      description: 期望的功能形态；如有参考（其他软件的实现）请一并说明
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: 涉及模块
+      options:
+        - 连线（识别/自动走子）
+        - 引擎对弈/分析
+        - 棋谱（打开/保存/变招）
+        - 开局库（本地/云库）
+        - 界面/渲染
+        - 其他
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: 是否愿意参与实现
+      options:
+        - label: 我愿意提交 PR 实现该功能

@@ -1,0 +1,61 @@
+name: 问题反馈 (Bug Report)
+description: 报告 TCHESS 的缺陷或异常行为
+labels: [ "bug" ]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！提交前请先搜索已有 Issue 避免重复。
+        连线/识别类问题请附上程序目录下 `samples/` 中的识别失败样本与 `logs/tchess*.log` 日志。
+  - type: dropdown
+    id: area
+    attributes:
+      label: 问题分类
+      options:
+        - 连线（识别/自动走子）
+        - 引擎对弈/分析
+        - 棋谱（打开/保存/变招）
+        - 开局库（本地/云库）
+        - 界面/渲染
+        - 其他
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: TCHESS 版本
+      description: 界面标题栏或"关于"对话框中的版本号
+      placeholder: 例如 V2.1
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 操作系统
+      options:
+        - Windows
+        - Linux
+        - macOS
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 如何触发该问题
+      placeholder: |
+        1. 打开连线（自动走棋模式）
+        2. ……
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为与实际行为
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: 附件（截图/日志/识别样本）
+      description: 截图、`samples/` 样本、`logs/tchess*.log` 片段等
