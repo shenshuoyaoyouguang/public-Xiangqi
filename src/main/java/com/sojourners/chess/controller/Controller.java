@@ -54,7 +54,7 @@ import java.io.IOException;
 import java.util.Date;
 import java.util.List;
 
-public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
+public class Controller implements ChessManualCallBack, EngineHost, LinkHost, GameHost {
 
     private static final System.Logger log = System.getLogger(Controller.class.getName());
 
@@ -169,7 +169,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
     private TableView<BookData> bookTable;
 
     // IT-7.1: 对局模式状态所有权迁入 GameSession，以下为兼容别名（PR5 收尾时清理）
-    private final GameSession session = new GameSession();
+    private final GameSession session = new GameSession(this);
     private SimpleObjectProperty<Boolean> robotRed = session.robotRedProperty();
     private SimpleObjectProperty<Boolean> robotBlack = session.robotBlackProperty();
     private SimpleObjectProperty<Boolean> robotAnalysis = session.robotAnalysisProperty();
@@ -193,11 +193,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
 
     @FXML
     public void newButtonClick(ActionEvent event) {
-        if (linkMode.getValue()) {
-            stopGraphLink();
-        }
-
-        newChessBoard(null);
+        session.newGame();
     }
 
     @FXML
@@ -255,7 +251,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
     void linkBackModeChecked(ActionEvent event) {
         CheckMenuItem item = (CheckMenuItem) event.getTarget();
         if (linkMode.getValue()) {
-            stopGraphLink();
+            session.stopGraphLink();
         }
         prop.setLinkBackMode(item.isSelected());
     }
@@ -283,7 +279,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
 
     @FXML
     public void analysisButtonClick(ActionEvent event) {
-        toggleMode(robotAnalysis, true);
+        session.toggleMode(robotAnalysis, true);
     }
 
     private void engineStop() {
@@ -305,13 +301,48 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
     }
 
     @Override
+    public void onBoardCreated(com.sojourners.chess.board.ChessBoard board) {
+        this.board = board;
+    }
+
+    @Override
+    public javafx.scene.control.ListView<com.sojourners.chess.model.ThinkData> getThinkListView() {
+        return listView;
+    }
+
+    @Override
+    public javafx.scene.control.Label getInfoShowLabel() {
+        return infoShowLabel;
+    }
+
+    @Override
+    public javafx.scene.canvas.Canvas getCanvas() {
+        return canvas;
+    }
+
+    @Override
+    public void setRedGo(boolean redGo) {
+        this.redGo = redGo;
+    }
+
+    @Override
+    public com.sojourners.chess.controller.handle.ManualController getManualController() {
+        return chessManualHandle;
+    }
+
+    @Override
+    public EngineController getEngineController() {
+        return engineController;
+    }
+
+    @Override
     public boolean isThinking() {
         return this.isThinking;
     }
 
     @Override
     public void newChessBoardForLink(String fenCode) {
-        newChessBoard(fenCode);
+        session.newChessBoard(fenCode);
     }
 
     @Override
@@ -358,7 +389,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
 
     @FXML
     public void blackButtonClick(ActionEvent event) {
-        toggleMode(robotBlack, false);
+        session.toggleMode(robotBlack, false);
     }
 
     @FXML
@@ -368,74 +399,14 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
         refreshEngineComboBox();
         // 如果引擎被卸载，则关闭
         if ((prop.getEngineName() == null || prop.getEngineName().isEmpty())) {
-            resetRobotModes();
+            session.resetRobotModes();
             engineController.unloadEngine();
         }
     }
 
-    /** 重置三个机器人模式属性，不操作按钮禁用状态。 */
-    private void resetRobotModes() {
-        robotRed.setValue(false);
-        robotBlack.setValue(false);
-        robotAnalysis.setValue(false);
-    }
-
     @FXML
     public void redButtonClick(ActionEvent event) {
-        toggleMode(robotRed, false);
-    }
-
-    /**
-     * 切换引擎角色（机器人黑/红/分析模式）。
-     * isAnalysis=true 时，启用会取消另两项且禁用红/黑/立即按钮。
-     * 黑/红启用时仅在轮到该方行棋时启动引擎；取消时若为该方行棋则停止引擎。
-     */
-    private void toggleMode(SimpleObjectProperty<Boolean> mode, boolean isAnalysis) {
-        if (!engineController.isLoaded()) {
-            DialogUtils.showWarningDialog("提示", "引擎未加载");
-            return;
-        }
-
-        boolean enable = !mode.getValue();
-        mode.setValue(enable);
-
-        if (isAnalysis) {
-            if (enable) {
-                robotRed.setValue(false);
-                robotBlack.setValue(false);
-            }
-            redButton.setDisable(enable);
-            blackButton.setDisable(enable);
-            immediateButton.setDisable(enable);
-            if (enable) engineGo(); else engineStop();
-        } else {
-            boolean isRedMode = (mode == robotRed);
-            boolean isMyTurn = isRedMode ? redGo : !redGo;
-            if (isMyTurn) {
-                if (enable) engineGo(); else engineStop();
-            }
-        }
-
-        if (linkMode.getValue() && !enable) {
-            stopGraphLink();
-        }
-    }
-
-    private void stopGraphLink() {
-        graphLinker.stop();
-
-        engineStop();
-
-        redButton.setDisable(false);
-        robotRed.setValue(false);
-
-        blackButton.setDisable(false);
-        robotBlack.setValue(false);
-
-        analysisButton.setDisable(false);
-        robotAnalysis.setValue(false);
-
-        linkMode.setValue(false);
+        session.toggleMode(robotRed, false);
     }
 
     @FXML
@@ -494,7 +465,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
     public void pasteButtonClick(ActionEvent e) {
         String fenCode = ClipboardUtils.getText();
         if ((fenCode != null && !fenCode.isEmpty()) && fenCode.split("/").length == 10) {
-            newFromOriginFen(fenCode);
+            session.newFromOriginFen(fenCode);
         }
     }
 
@@ -606,7 +577,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
         if (linkMode.getValue()) {
             graphLinker.start();
         } else {
-            stopGraphLink();
+            session.stopGraphLink();
         }
     }
 
@@ -675,7 +646,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
 
         useOpenBook.setValue(prop.getBookSwitch());
         // 初始化棋局
-        newChessBoard(null);
+        session.newChessBoard(null);
         // 加载引擎
         engineController.loadEngine(prop.getEngineName());
     }
@@ -687,7 +658,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
                 return;
             }
             String fenCode = ChessBoard.fenCode(result, true);
-            newFromOriginFen(fenCode);
+            session.newFromOriginFen(fenCode);
         }
     }
 
@@ -834,7 +805,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
     @FXML
     public void editChessBoardClick(ActionEvent e) {
         String fenCode = App.openEditChessBoard(board.getBoard(), redGo, isReverse.getValue());
-        newFromOriginFen(fenCode);
+        session.newFromOriginFen(fenCode);
     }
 
     /**
@@ -842,55 +813,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
      * @param fenCode
      */
     private void newFromOriginFen(String fenCode) {
-        if ((fenCode != null && !fenCode.isEmpty())) {
-            if (linkMode.getValue()) {
-                stopGraphLink();
-            }
-
-            newChessBoard(fenCode);
-            if (XiangqiUtils.isReverse(fenCode)) {
-                reverseButtonClick(null);
-            }
-        }
-    }
-
-    private void newChessBoard(String fenCode) {
-        newChessBoard(fenCode, false);
-    }
-
-    /**
-     * 新建局面
-     * @param fenCode 传null 新建默认初始局面；传fenCode 则根据fen创建局面
-     */
-    private void newChessBoard(String fenCode, boolean fromManual) {
-        // 重置按钮
-        resetRobotModes();
-        redButton.setDisable(false);
-        blackButton.setDisable(false);
-        immediateButton.setDisable(false);
-        isReverse.setValue(false);
-        // 引擎停止计算
-        engineStop();
-        // 绘制棋盘
-        board = new ChessBoard(this.canvas, prop.getBoardSize(), prop.getBoardStyle(), prop.isStepTip(), prop.isManualTip(),
-                engineController.isLoaded() && engineController.getMultiPV() > 1, prop.isStepSound(), prop.isShowNumber(), fenCode);
-        // 设置局面
-        redGo = (fenCode == null || fenCode.isEmpty()) ? true : fenCode.contains("w");
-        fenCode = board.fenCode(redGo);
-        // 设置棋谱
-        if (!fromManual)
-            chessManualHandle.newChessManual(fenCode);
-        // 重置趋势图
-        refreshLineChart();
-        // 重置引擎思考输出
-        listView.getItems().clear();
-        // 清空思考状态信息
-        this.infoShowLabel.setText("");
-
-        // 库招显示
-        doOpenBook();
-
-        System.gc();
+        session.newFromOriginFen(fenCode);
     }
 
     private void initEngineView() {
@@ -952,13 +875,13 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
                     // 保存引擎设置
                     prop.setEngineName(t1);
                     // 重置三个按钮
-                    resetRobotModes();
+                    session.resetRobotModes();
                     redButton.setDisable(false);
                     blackButton.setDisable(false);
                     immediateButton.setDisable(false);
                     // 停止连线
                     if (linkMode.getValue()) {
-                        stopGraphLink();
+                        session.stopGraphLink();
                     }
                     // 加载新引擎
                     engineController.loadEngine(t1);
@@ -1093,26 +1016,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
      */
     @Override
     public void switchPlayer(boolean f) {
-        engineStop();
-
-        graphLinker.pause();
-
-        boolean tmpRed = robotRed.getValue(), tmpBlack = robotBlack.getValue(), tmpAnalysis = robotAnalysis.getValue(), tmpLink = linkMode.getValue(), tmpReverse = isReverse.getValue();
-
-        String fenCode = board.fenCode(f ? !redGo : redGo);
-        newChessBoard(fenCode);
-
-        isReverse.setValue(tmpReverse);
-        board.reverse(tmpReverse);
-        robotRed.setValue(tmpRed);
-        robotBlack.setValue(tmpBlack);
-        robotAnalysis.setValue(tmpAnalysis);
-        linkMode.setValue(tmpLink);
-
-        graphLinker.resume();
-        if (robotRed.getValue() && redGo || robotBlack.getValue() && !redGo || robotAnalysis.getValue()) {
-            engineGo();
-        }
+        session.switchPlayer(f);
     }
 
     // ------------- 棋谱管理 start -----------------
@@ -1176,7 +1080,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
     }
     @FXML
     void deleteButtonClick(ActionEvent event) {
-        checkLinkMode();
+        session.checkLinkMode();
         chessManualHandle.deleteButtonClick(event);
     }
     @FXML
@@ -1186,22 +1090,22 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
             return;
         }
 
-        checkLinkMode();
+        session.checkLinkMode();
         chessManualHandle.scoreButtonClick(event);
     }
     @FXML
     void playButtonClick(ActionEvent event) {
-        checkLinkMode();
+        session.checkLinkMode();
         chessManualHandle.playButtonClick(event);
     }
     @FXML
     void downwardButtonClick(ActionEvent event) {
-        checkLinkMode();
+        session.checkLinkMode();
         chessManualHandle.manualButtonClick(8);
     }
     @FXML
     void upwardButtonClick(ActionEvent event) {
-        checkLinkMode();
+        session.checkLinkMode();
         chessManualHandle.manualButtonClick(7);
     }
 
@@ -1221,12 +1125,12 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
 
     @Override
     public void newChessBoardFromManual(String fenCode) {
-        newChessBoard(fenCode, true);
+        session.newChessBoard(fenCode, true);
     }
 
     @Override
     public void browseChessRecord(String fenCode, List<String> moveList, boolean redGo, List<String> nextList) {
-        checkLinkMode();
+        session.checkLinkMode();
         // 棋盘
         board.browseChessRecord(fenCode, moveList);
         board.setManualList(nextList);
@@ -1256,26 +1160,24 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
     }
 
     private void checkLinkMode() {
-        if (linkMode.getValue()) {
-            stopGraphLink();
-        }
+        session.checkLinkMode();
     }
 
     @FXML
     void recordTableClick(MouseEvent event) {
-        checkLinkMode();
+        session.checkLinkMode();
         chessManualHandle.manualButtonClick(5);
     }
 
     @FXML
     public void backButtonClick(ActionEvent event) {
-        checkLinkMode();
+        session.checkLinkMode();
         chessManualHandle.manualButtonClick(2);
     }
 
     @FXML
     public void regretButtonClick(ActionEvent event) {
-        checkLinkMode();
+        session.checkLinkMode();
         if (redGo && robotRed.getValue() || !redGo && robotBlack.getValue()) {
             chessManualHandle.manualButtonClick(2);
         } else {
@@ -1285,19 +1187,19 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost {
 
     @FXML
     void forwardButtonClick(ActionEvent event) {
-        checkLinkMode();
+        session.checkLinkMode();
         chessManualHandle.manualButtonClick(3);
     }
 
     @FXML
     void finalButtonClick(ActionEvent event) {
-        checkLinkMode();
+        session.checkLinkMode();
         chessManualHandle.manualButtonClick(4);
     }
 
     @FXML
     void frontButtonClick(ActionEvent event) {
-        checkLinkMode();
+        session.checkLinkMode();
         chessManualHandle.manualButtonClick(1);
     }
 
