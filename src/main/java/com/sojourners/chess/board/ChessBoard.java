@@ -540,8 +540,8 @@ public class ChessBoard {
                 height = height - 27;
             }
             int pieceSize;
-            if (width / height > 1120 / 1240d) {
-                pieceSize = (int) (height / (10 + 1/3d));
+            if (width / height > 1120 / 1250d) {
+                pieceSize = (int) (height / (10 + 1/3d + 1/12d));
             } else {
                 pieceSize = (int) (width / (9 + 1/3d));
             }

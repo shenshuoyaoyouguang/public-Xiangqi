@@ -35,7 +35,7 @@ public abstract class BaseBoardRender implements BoardRender {
         int pos = padding + piece / 2;
 
         canvas.setWidth(2 * padding + piece * 9);
-        canvas.setHeight(2 * padding + piece * 10);
+        canvas.setHeight(2 * padding + piece * 10 + piece / 12d);
 
         // 绘制背景图片
         drawBackgroundImage(canvas.getWidth(), canvas.getHeight());
@@ -94,7 +94,7 @@ public abstract class BaseBoardRender implements BoardRender {
         int pos = padding + piece / 2;
 
         canvas.setWidth(2 * padding + piece * 2);
-        canvas.setHeight(2 * padding + piece * 10);
+        canvas.setHeight(2 * padding + piece * 10 + piece / 12d);
 
         // 绘制背景
         gc.setFill(getBackgroundColor());
@@ -119,20 +119,15 @@ public abstract class BaseBoardRender implements BoardRender {
 
     @Override
     public void drawCenterText(int pos, int piece, ChessBoard.BoardSize style) {
-        // 绘制楚河汉界(深褐配色与黄褐木底协调,极细浅色描边提升可读性)
+        // 绘制楚河汉界(深褐色,与暖木底协调)
         double centerTextSize = getCenterTextSize(style);
         gc.setFont(Font.font(centerTextSize));
-        gc.setLineWidth(1.0);
-        gc.setStroke(Color.web("#E8C58A", 0.45));
-        gc.setFill(Color.web("#4A2E12"));
+        gc.setFill(Color.web("#1F4520"));
         gc.setGlobalAlpha(0.55);
-        String[] words = {"楚", "河", "汉", "界"};
-        double[] xs = {pos + 2 * piece - centerTextSize, pos + 3 * piece - centerTextSize, pos + 5 * piece, pos + 6 * piece};
-        double ys = pos + 4.5 * piece + centerTextSize / 3.6;
-        for (int i = 0; i < words.length; i++) {
-            gc.strokeText(words[i], xs[i], ys);
-            gc.fillText(words[i], xs[i], ys);
-        }
+        gc.fillText("楚", pos + 2 * piece - centerTextSize, pos + 4.5 * piece + centerTextSize / 3.6);
+        gc.fillText("河", pos + 3 * piece - centerTextSize, pos + 4.5 * piece + centerTextSize / 3.6);
+        gc.fillText("汉", pos + 5 * piece, pos + 4.5 * piece + centerTextSize / 3.6);
+        gc.fillText("界", pos + 6 * piece, pos + 4.5 * piece + centerTextSize / 3.6);
         gc.setGlobalAlpha(1);
     }
 
@@ -227,37 +222,37 @@ public abstract class BaseBoardRender implements BoardRender {
 
     @Override
     public void drawStepRemark(int pos, int piece, int x, int y, boolean isPrevStep, boolean isReverse, ChessBoard.BoardSize style) {
+        // L 形四角标记(回归原版样式,传统且醒目)
         x = pos + piece * getReverseX(x, isReverse);
         y = pos + piece * getReverseY(y, isReverse);
 
         double len = piece / 1.08;
-        double radius = piece / 12d;
-        Color color = isPrevStep ? Color.web("#bf242a") : Color.web("#0000FF");
-
-        gc.save();
-        // 圆角矩形:半透明填充 + 同色描边,替代原来的直角 L 形拼角
-        gc.setGlobalAlpha(0.20);
-        gc.setFill(color);
-        gc.fillRoundRect(x - len / 2, y - len / 2, len, len, radius, radius);
-        gc.setGlobalAlpha(0.85);
-        gc.setStroke(color);
         gc.setLineWidth(getStepRectWitdh(style));
-        gc.strokeRoundRect(x - len / 2, y - len / 2, len, len, radius, radius);
-        gc.restore();
+        Color color = isPrevStep ? Color.web("#bf242a") : Color.web("#0000FF");
+        gc.setStroke(color);
+        gc.strokePolyline(new double[]{x - len / 2 + len / 6, x - len / 2, x - len / 2},
+                new double[]{y - len / 2, y - len / 2, y - len / 2 + len / 6},
+                3);
+        gc.strokePolyline(new double[]{x - len / 2 + len / 6, x - len / 2, x - len / 2},
+                new double[]{y + len / 2, y + len / 2, y + len / 2 - len / 6},
+                3);
+        gc.strokePolyline(new double[]{x + len / 2 - len / 6, x + len / 2, x + len / 2},
+                new double[]{y - len / 2, y - len / 2, y - len / 2 + len / 6},
+                3);
+        gc.strokePolyline(new double[]{x + len / 2 - len / 6, x + len / 2, x + len / 2},
+                new double[]{y + len / 2, y + len / 2, y + len / 2 - len / 6},
+                3);
     }
 
     @Override
     public void drawBoardLine(int pos, int padding, int piece, boolean isReverse, ChessBoard.BoardSize style) {
-        // 棋盘线分层:外框粗深褐、内框/内线略细深褐,营造“刻在木头上”的层次
-        gc.setStroke(Color.web("#5A3A1A"));
+        // 棋盘竖线横线(深褐色,网格清晰)
+        gc.setStroke(Color.web("#1F4520"));
         gc.setLineWidth(getOutRectWidth(style));
-        gc.setGlobalAlpha(0.85);
+        gc.setGlobalAlpha(0.8);
         gc.strokeRect(pos - padding / 2, pos - padding / 2, piece * 8 + padding, piece * 9 + padding);
-        gc.setGlobalAlpha(1);
-
-        gc.setStroke(Color.web("#4A2E12"));
+        gc.setGlobalAlpha(0.75);
         gc.setLineWidth(getInnerRectWidth(style));
-        gc.setGlobalAlpha(0.7);
         gc.strokeRect(pos, pos, piece * 8, piece * 9);
         for (int i = 1; i < 9; i++) {
             gc.strokeLine(pos, pos + piece * i, pos + piece * 8, pos + piece * i);
@@ -285,11 +280,11 @@ public abstract class BaseBoardRender implements BoardRender {
     }
 
     public void drawBoardNum(int pos, int piece, boolean isReverse, ChessBoard.BoardSize style) {
-        // 绘制线路序号(深褐配色,与木底协调)
+        // 绘制线路序号(深褐色,与棋盘线一致)
         double numberSize = getNumberSize(style);
         gc.setFont(Font.font(numberSize));
-        gc.setFill(Color.web("#4A2E12"));
-        gc.setGlobalAlpha(0.7);
+        gc.setFill(Color.web("#1F4520"));
+        gc.setGlobalAlpha(0.75);
         for (int i = 0; i < 9; i++) {
             // 黑方
             char number = (char) ('１' + i);
@@ -333,19 +328,19 @@ public abstract class BaseBoardRender implements BoardRender {
     }
 
     /**
-     * 棋盘内矩形线条宽度
+     * 棋盘内矩形线条宽度(回归原版比例)
      * @return
      */
     private double getInnerRectWidth(ChessBoard.BoardSize style) {
-        return getOutRectWidth(style) * 0.7d;
+        return getOutRectWidth(style) / 2d;
     }
 
     /**
-     * 棋盘外矩形线条宽度(较原版加粗,形成外粗内细的刻线层次)
+     * 棋盘外矩形线条宽度(回归原版比例)
      * @return
      */
     private double getOutRectWidth(ChessBoard.BoardSize style) {
-        return getPieceSize(style) / 30d;
+        return getPieceSize(style) / 40d;
     }
 
     /**
