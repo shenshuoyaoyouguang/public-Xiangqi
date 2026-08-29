@@ -413,10 +413,23 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
     public void canvasClick(MouseEvent event) {
 
         if (event.getButton() == MouseButton.PRIMARY) {
+            // IT-12.1 #58: 连线自动走棋时允许人工走子（连线设置中开启），点击即走子并代点到平台
+            boolean manualMoveAllowed = linkMode.getValue() && Boolean.TRUE.equals(prop.getLinkManualMove());
             String move = board.mouseClick((int) event.getX(), (int) event.getY(),
-                    redGo && !robotRed.getValue(), !redGo && !robotBlack.getValue());
+                    redGo && (!robotRed.getValue() || manualMoveAllowed),
+                    !redGo && (!robotBlack.getValue() || manualMoveAllowed));
 
             if (move != null) {
+                if (manualMoveAllowed) {
+                    // 人工走子代点到第三方平台
+                    ChessBoard.Step manualStep = board.stepForBoard(move);
+                    int mx1 = manualStep.getStart().getX(), my1 = manualStep.getStart().getY();
+                    int mx2 = manualStep.getEnd().getX(), my2 = manualStep.getEnd().getY();
+                    if (robotBlack.getValue()) {
+                        my1 = 9 - my1; my2 = 9 - my2; mx1 = 8 - mx1; mx2 = 8 - mx2;
+                    }
+                    graphLinker.autoClick(mx1, my1, mx2, my2);
+                }
                 onMoveApplied(move);
             }
 

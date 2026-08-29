@@ -70,6 +70,7 @@ public class Properties {
 
     private Integer cloudBookTimeout;
 
+    private Boolean linkManualMove = false;
     private Boolean ponderEnable = false;
     private Integer linkMoveTime;
     private Integer offManualSteps;
@@ -319,6 +320,14 @@ public class Properties {
 
     public void setPonderEnable(Boolean ponderEnable) {
         this.ponderEnable = ponderEnable;
+    }
+
+    public Boolean getLinkManualMove() {
+        return linkManualMove;
+    }
+
+    public void setLinkManualMove(Boolean linkManualMove) {
+        this.linkManualMove = linkManualMove;
     }
 
     public void setLinkMoveTime(Integer linkMoveTime) {
