@@ -33,6 +33,7 @@ jobs:
           cache: maven
 
       - name: Build jar, dependencies and staging directory
+        shell: bash
         run: |
           VERSION=$(mvn -B help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
