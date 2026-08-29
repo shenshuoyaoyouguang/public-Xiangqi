@@ -1,0 +1,14 @@
+# 所有文本文件统一 LF（仓库与工作区均为 LF）
+* text=auto eol=lf
+
+# 二进制文件不做任何转换
+*.png binary
+*.jpg binary
+*.JPG binary
+*.ico binary
+*.ttf binary
+*.wav binary
+*.onnx binary
+
+# JAR 规范要求 MANIFEST.MF 使用 CRLF，保持原样
+MANIFEST.MF -text
