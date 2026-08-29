@@ -1,0 +1,15 @@
+# Build output
+target/
+
+# WorkBuddy project data (not source)
+.workbuddy/
+
+# Runtime config (generated next to jar, not tracked)
+properties.json
+properties
+*.legacy.bak
+
+# IDE
+.idea/
+*.iml
+.vscode/

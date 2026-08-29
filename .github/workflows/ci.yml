@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main, dev]
+  pull_request:
+    branches: [master, main, dev]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Compile with Maven
+        run: mvn -B compile
+
+      # 项目无单元测试目录(见 AGENTS.md),验证标准为编译通过 + 手动运行。
+      # 若后续引入测试,取消下行注释并运行测试。
+      # - name: Run tests
+      #   run: mvn -B test
