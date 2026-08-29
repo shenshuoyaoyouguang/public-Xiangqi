@@ -1,4 +1,7 @@
 # TCHESS
+
+[![CI](https://github.com/shenshuoyaoyouguang/public-Xiangqi/actions/workflows/ci.yml/badge.svg)](https://github.com/shenshuoyaoyouguang/public-Xiangqi/actions/workflows/ci.yml)
+
 TCHESS 是一款支持 uci 和 ucci 协议引擎的跨平台象棋界面程序，具有功能：
 + 加载引擎
 + 对弈
