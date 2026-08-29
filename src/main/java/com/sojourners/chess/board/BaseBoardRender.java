@@ -23,12 +23,17 @@ public abstract class BaseBoardRender implements BoardRender {
 
     public BaseBoardRender(Canvas canvas) {
         this.canvas = canvas;
-        this.gc = canvas.getGraphicsContext2D();
+        // canvas 为 null 表示无渲染环境（测试/headless），仅构建骨架不取图形上下文
+        this.gc = canvas == null ? null : canvas.getGraphicsContext2D();
     }
 
     public void paint(ChessBoard.BoardSize boardSize, char[][] board, ChessBoard.Step prevStep, ChessBoard.Point remark,
                       boolean stepTip, boolean showMultiPV, List<ChessBoard.MoveTip> moveTips, boolean isReverse, boolean showNumber,
                       boolean manualTip, List<ChessBoard.Step> manualList) {
+        // 无渲染环境（canvas 为 null，测试/headless）跳过绘制
+        if (gc == null) {
+            return;
+        }
         Properties prop = Properties.getInstance();
         int padding = getPadding(boardSize);
         int piece = getPieceSize(boardSize);

@@ -435,6 +435,10 @@ public class ChessBoard {
     }
 
     private void paint() {
+        // 无渲染器时跳过绘制，保证走子逻辑在无窗口环境（测试/headless）可独立运行
+        if (this.boardRender == null) {
+            return;
+        }
         this.boardRender.paint(boardSize, this.board, prevStep, remark, stepTip,
                 showMultiPV, moveTips, isReverse, showNumber, manualTip, manualList);
     }
