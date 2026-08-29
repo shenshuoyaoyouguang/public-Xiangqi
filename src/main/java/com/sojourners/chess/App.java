@@ -18,6 +18,8 @@ import javafx.stage.Stage;
 import javafx.stage.Window;
 import javafx.stage.WindowEvent;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 
 /**
@@ -25,8 +27,24 @@ import java.net.URL;
  */
 public class App extends Application {
 
-    public static final String VERSION = "1.9";
-    public static final String BUILT_ON = "20260801";
+    // 版本信息由构建期经资源过滤注入 build.properties，版本单一真源为 pom.xml
+    public static final String VERSION = loadBuildProperty("version");
+    public static final String BUILT_ON = loadBuildProperty("builtOn");
+
+    /**
+     * 读取构建期注入的 build.properties（注意 config.Properties 遮蔽了 java.util.Properties，需全限定名）
+     */
+    private static String loadBuildProperty(String key) {
+        java.util.Properties p = new java.util.Properties();
+        try (InputStream in = App.class.getResourceAsStream("/build.properties")) {
+            if (in != null) {
+                p.load(in);
+            }
+        } catch (IOException e) {
+            return "unknown";
+        }
+        return p.getProperty(key, "unknown");
+    }
 
     private static Stage engineAdd;
     private static Stage engineSetting;
