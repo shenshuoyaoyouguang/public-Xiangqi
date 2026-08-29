@@ -27,6 +27,11 @@ public final class Logging {
         System.setProperty("java.util.logging.SimpleFormatter.format",
                 "%1$tF %1$tT %4$s %3$s %5$s%6$s%n");
         try {
+            // FileHandler 不会自动创建目录，先确保日志目录存在
+            java.io.File logDir = new java.io.File(PathUtils.getJarPath() + "logs");
+            if (!logDir.exists()) {
+                logDir.mkdirs();
+            }
             FileHandler fh = new FileHandler(PathUtils.getJarPath() + "logs/tchess%g.log",
                     5_000_000, 3, true);
             fh.setFormatter(new java.util.logging.SimpleFormatter());

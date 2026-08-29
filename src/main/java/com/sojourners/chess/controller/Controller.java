@@ -628,6 +628,8 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
         engineController = new EngineController(this, listView, charPane, bookTable, infoShowLabel, timeShowLabel);
         // IT-7.3: 连线域
         linkController = new LinkController(this, linkComboBox);
+        // IT-7.5: GameSession 绑定模式切换所需按钮
+        session.bindButtons(redButton, blackButton, analysisButton, immediateButton);
         // 思考细节listView
         engineController.initListView();
         // 按钮
