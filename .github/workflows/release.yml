@@ -52,7 +52,9 @@ jobs:
           jpackage --type app-image --name TCHESS --input target/staging \
             --main-jar Xiangqi-$VERSION.jar --main-class com.sojourners.chess.Main \
             --app-version $VERSION --dest target/dist
-          powershell -Command "Compress-Archive -Path target/dist/TCHESS -DestinationPath tchess_$env:VERSION_${{ matrix.artifact }}.zip"
+          # ZIP 文件名由 bash 变量拼好再传给 powershell，避免 $env: 被 bash 吞掉
+          ZIP="tchess_${VERSION}_windows_x64.zip"
+          powershell -Command "Compress-Archive -Path target/dist/TCHESS -DestinationPath \"$ZIP\""
 
       - name: jpackage (linux app-image)
         if: runner.os == 'Linux'
