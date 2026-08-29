@@ -47,6 +47,9 @@ public class Engine {
      * 停止标志位
      */
     private volatile boolean stopFlag;
+
+    // IT-11.1: ponder 后台思考状态
+    private volatile boolean pondering;
     private volatile long time;
 
     private BufferedReader reader;
@@ -214,6 +217,7 @@ public class Engine {
             stopFlag = false;
             return;
         }
+        pondering = false;
 
         String[] str = msg.split(" ");
         if (str.length < 2 || !validateMove(str[1])) {
@@ -369,7 +373,40 @@ public class Engine {
 
     public void stop() {
         stopFlag = true;
+        pondering = false;
         cmd("stop");
+    }
+
+    /**
+     * IT-11.1 #68: 启动 ponder 后台思考（预测对手应手后继续计算）。
+     * @param fenCode   当前局面 FEN
+     * @param moves     已走着法序列
+     * @param ponderMove 引擎预测的对手应手
+     */
+    public void startPonder(String fenCode, List<String> moves, String ponderMove) {
+        stop();
+        StringBuilder sb = new StringBuilder();
+        sb.append("position fen ").append(fenCode);
+        if (moves != null && moves.size() > 0) {
+            sb.append(" moves");
+            for (String m : moves) {
+                sb.append(" ").append(m);
+            }
+        }
+        sb.append(" ").append(ponderMove);
+        cmd(sb.toString());
+        cmd("go ponder");
+        pondering = true;
+    }
+
+    public void ponderhit() {
+        if (pondering) {
+            cmd("ponderhit");
+        }
+    }
+
+    public boolean isPondering() {
+        return pondering;
     }
 
     private void cmd(String command) {

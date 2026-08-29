@@ -100,6 +100,21 @@ public class EngineController implements EngineCallBack {
         }
     }
 
+    /**
+     * IT-11.1 #68: 启动 ponder 后台思考（预测对手应手后继续计算）
+     */
+    public void startPonder(String fenCode, List<String> moves, String ponderMove) {
+        if (engine != null) {
+            engine.startPonder(fenCode, moves, ponderMove);
+        }
+    }
+
+    public void ponderhit() {
+        if (engine != null) {
+            engine.ponderhit();
+        }
+    }
+
     public void go() {
         if (engine == null) {
             DialogUtils.showWarningDialog("提示", "引擎未加载");
@@ -117,7 +132,13 @@ public class EngineController implements EngineCallBack {
 
         engine.setThreadNum(prop.getThreadNum());
         engine.setHashSize(prop.getHashSize());
-        engine.setAnalysisModel(session().robotAnalysisProperty().getValue() ? Engine.AnalysisModel.INFINITE : prop.getAnalysisModel(), prop.getAnalysisValue());
+        // IT-11.3 #59: 连线对弈时按连线参数中设定的引擎步时（秒）强制限时
+        Integer linkMoveTime = prop.getLinkMoveTime();
+        if (session().linkModeProperty().getValue() && linkMoveTime != null && linkMoveTime > 0) {
+            engine.setAnalysisModel(Engine.AnalysisModel.FIXED_TIME, linkMoveTime * 1000L);
+        } else {
+            engine.setAnalysisModel(session().robotAnalysisProperty().getValue() ? Engine.AnalysisModel.INFINITE : prop.getAnalysisModel(), prop.getAnalysisValue());
+        }
         engine.analysis(host.getChessManualHandle().getFenCode(), host.getChessManualHandle().getMoveList(), host.getBoard().getBoard(), host.isRedGo());
     }
 

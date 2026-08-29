@@ -21,6 +21,8 @@ public class LinkSettingController {
 
     @FXML
     private TextField mouseMoveDelay;
+    @FXML
+    private TextField linkMoveTime;
 
     private Properties prop;
 
@@ -57,6 +59,12 @@ public class LinkSettingController {
             return;
         }
         prop.setMouseMoveDelay(Integer.parseInt(txt));
+        txt = linkMoveTime.getText();
+        if (!isNonNegativeInt(txt)) {
+            DialogUtils.showErrorDialog("失败", "输入引擎步时错误");
+            return;
+        }
+        prop.setLinkMoveTime(txt.isEmpty() ? null : Integer.parseInt(txt));
 
         App.closeLinkSetting();
     }
@@ -79,6 +87,7 @@ public class LinkSettingController {
 
         mouseClickDelay.setText(String.valueOf(prop.getMouseClickDelay()));
         mouseMoveDelay.setText(String.valueOf(prop.getMouseMoveDelay()));
+        linkMoveTime.setText(prop.getLinkMoveTime() == null ? "0" : String.valueOf(prop.getLinkMoveTime()));
 
     }
 

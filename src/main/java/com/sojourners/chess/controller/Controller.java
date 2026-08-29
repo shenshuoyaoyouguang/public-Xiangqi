@@ -429,8 +429,41 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
 
     }
 
+    // IT-11.1 #68: 引擎预测的对手应手（ponder 命中判定用），null 表示无 pending ponder
+    private String pendingPonderMove;
+    // IT-11.1 #68: 引擎走子待应用标志——应用后启动 ponder 而非常规分析
+    private boolean startPonderOnNextMove;
+
     @Override
     public void onMoveApplied(String move) {
+        if (startPonderOnNextMove) {
+            // 引擎自身走子的应用：走子后以预测的对手应手启动 ponder 后台思考
+            startPonderOnNextMove = false;
+            applyMoveBookkeeping(move);
+            engineController.startPonder(chessManualHandle.getFenCode(), chessManualHandle.getMoveList(), pendingPonderMove);
+            return;
+        }
+        if (pendingPonderMove != null) {
+            // 对手走子与引擎预测比较：命中则 ponderhit 继续计算，落空则废弃后走常规分析
+            String expected = pendingPonderMove;
+            pendingPonderMove = null;
+            if (move.equals(expected) && Boolean.TRUE.equals(prop.getPonderEnable())) {
+                applyMoveBookkeeping(move);
+                engineController.ponderhit();
+                return; // 引擎已在算该局面，无需重启分析
+            }
+            engineController.stop(); // 预测落空，废弃 ponder 思考
+        }
+        applyMoveBookkeeping(move);
+        // 触发引擎走棋
+        if (redGo && robotRed.getValue() || !redGo && robotBlack.getValue() || robotAnalysis.getValue()) {
+            engineController.go();
+        } else {
+            engineController.queryOpenBook();
+        }
+    }
+
+    private void applyMoveBookkeeping(String move) {
         // 记录棋谱
         List<String> nextList = chessManualHandle.boardMove(move, board.translate(move, true));
         board.setManualList(nextList);
@@ -438,12 +471,6 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
         refreshLineChart();
         // 切换行棋方
         redGo = !redGo;
-        // 触发引擎走棋
-        if (redGo && robotRed.getValue() || !redGo && robotBlack.getValue() || robotAnalysis.getValue()) {
-            engineController.go();
-        } else {
-            engineController.queryOpenBook();
-        }
     }
 
     @Override
@@ -898,6 +925,13 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
     public void onEngineBestMove(String first, String second) {
         if (redGo && robotRed.getValue() || !redGo && robotBlack.getValue()) {
             ChessBoard.Step s = board.stepForBoard(first);
+
+            // IT-11.1 #68: 引擎给出 ponder 预测应手且启用后台思考时（人机对弈，连线模式暂不启用），
+            // 走子应用后立即以预测应手启动 ponder 后台计算
+            if (Boolean.TRUE.equals(prop.getPonderEnable()) && second != null && !linkMode.getValue()) {
+                startPonderOnNextMove = true;
+                pendingPonderMove = second;
+            }
 
             Platform.runLater(() -> {
                 board.move(s.getStart().getX(), s.getStart().getY(), s.getEnd().getX(), s.getEnd().getY());
