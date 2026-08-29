@@ -56,8 +56,8 @@ public abstract class BaseBoardRender implements BoardRender {
         if (remark != null) {
             drawStepRemark(pos, piece, remark.x, remark.y, false, isReverse, boardSize);
         }
-        // 绘制棋子
-        drawPieces(pos, piece, board, isReverse, boardSize);
+        // 绘制棋子(带选中标记,用于外发光)
+        drawPieces(pos, piece, board, isReverse, boardSize, remark);
         // 棋谱变招
         if (manualTip && manualList != null && manualList.size() > 1) {
             for (int i = manualList.size() - 1; i >= 0; i--) {
@@ -103,22 +103,36 @@ public abstract class BaseBoardRender implements BoardRender {
         if (remark != null) {
             drawStepRemark(pos, piece, remark.x, remark.y, true, false, boardSize);
         }
-        // 绘制棋子
-        drawPieces(pos, piece, board, false, boardSize);
+        // 绘制棋子(带选中标记,用于外发光)
+        drawPieces(pos, piece, board, false, boardSize, remark);
 
+    }
+
+    /**
+     * 绘制棋子(带选中标记)。
+     * 默认实现忽略 remark 并委托给无 remark 版本,保证 CustomBoardRender 等子类不受影响;
+     * 需要选中外发光的子类(如 DefaultBoardRender)重写本方法。
+     */
+    public void drawPieces(int pos, int piece, char[][] board, boolean isReverse, ChessBoard.BoardSize style, ChessBoard.Point remark) {
+        drawPieces(pos, piece, board, isReverse, style);
     }
 
     @Override
     public void drawCenterText(int pos, int piece, ChessBoard.BoardSize style) {
-        // 绘制楚河汉界
+        // 绘制楚河汉界(深褐配色与黄褐木底协调,极细浅色描边提升可读性)
         double centerTextSize = getCenterTextSize(style);
         gc.setFont(Font.font(centerTextSize));
-        gc.setFill(Color.BLACK);
+        gc.setLineWidth(1.0);
+        gc.setStroke(Color.web("#E8C58A", 0.45));
+        gc.setFill(Color.web("#4A2E12"));
         gc.setGlobalAlpha(0.55);
-        gc.fillText("楚", pos + 2 * piece - centerTextSize, pos + 4.5 * piece + centerTextSize / 3.6);
-        gc.fillText("河", pos + 3 * piece - centerTextSize, pos + 4.5 * piece + centerTextSize / 3.6);
-        gc.fillText("汉", pos + 5 * piece, pos + 4.5 * piece + centerTextSize / 3.6);
-        gc.fillText("界", pos + 6 * piece, pos + 4.5 * piece + centerTextSize / 3.6);
+        String[] words = {"楚", "河", "汉", "界"};
+        double[] xs = {pos + 2 * piece - centerTextSize, pos + 3 * piece - centerTextSize, pos + 5 * piece, pos + 6 * piece};
+        double ys = pos + 4.5 * piece + centerTextSize / 3.6;
+        for (int i = 0; i < words.length; i++) {
+            gc.strokeText(words[i], xs[i], ys);
+            gc.fillText(words[i], xs[i], ys);
+        }
         gc.setGlobalAlpha(1);
     }
 
@@ -217,32 +231,33 @@ public abstract class BaseBoardRender implements BoardRender {
         y = pos + piece * getReverseY(y, isReverse);
 
         double len = piece / 1.08;
-        gc.setLineWidth(getStepRectWitdh(style));
+        double radius = piece / 12d;
         Color color = isPrevStep ? Color.web("#bf242a") : Color.web("#0000FF");
+
+        gc.save();
+        // 圆角矩形:半透明填充 + 同色描边,替代原来的直角 L 形拼角
+        gc.setGlobalAlpha(0.20);
+        gc.setFill(color);
+        gc.fillRoundRect(x - len / 2, y - len / 2, len, len, radius, radius);
+        gc.setGlobalAlpha(0.85);
         gc.setStroke(color);
-        gc.strokePolyline(new double[]{x - len / 2 + len / 6, x - len / 2, x - len / 2},
-                new double[]{y - len / 2, y - len / 2, y - len / 2 + len / 6},
-                3);
-        gc.strokePolyline(new double[]{x - len / 2 + len / 6, x - len / 2, x - len / 2},
-                new double[]{y + len / 2, y + len / 2, y + len / 2 - len / 6},
-                3);
-        gc.strokePolyline(new double[]{x + len / 2 - len / 6, x + len / 2, x + len / 2},
-                new double[]{y - len / 2, y - len / 2, y - len / 2 + len / 6},
-                3);
-        gc.strokePolyline(new double[]{x + len / 2 - len / 6, x + len / 2, x + len / 2},
-                new double[]{y + len / 2, y + len / 2, y + len / 2 - len / 6},
-                3);
+        gc.setLineWidth(getStepRectWitdh(style));
+        gc.strokeRoundRect(x - len / 2, y - len / 2, len, len, radius, radius);
+        gc.restore();
     }
 
     @Override
     public void drawBoardLine(int pos, int padding, int piece, boolean isReverse, ChessBoard.BoardSize style) {
-        // 棋盘竖线横线
-        gc.setStroke(Color.BLACK);
+        // 棋盘线分层:外框粗深褐、内框/内线略细深褐,营造“刻在木头上”的层次
+        gc.setStroke(Color.web("#5A3A1A"));
         gc.setLineWidth(getOutRectWidth(style));
-        gc.setGlobalAlpha(0.75);
+        gc.setGlobalAlpha(0.85);
         gc.strokeRect(pos - padding / 2, pos - padding / 2, piece * 8 + padding, piece * 9 + padding);
         gc.setGlobalAlpha(1);
+
+        gc.setStroke(Color.web("#4A2E12"));
         gc.setLineWidth(getInnerRectWidth(style));
+        gc.setGlobalAlpha(0.7);
         gc.strokeRect(pos, pos, piece * 8, piece * 9);
         for (int i = 1; i < 9; i++) {
             gc.strokeLine(pos, pos + piece * i, pos + piece * 8, pos + piece * i);
@@ -266,13 +281,15 @@ public abstract class BaseBoardRender implements BoardRender {
             drawStarPos(pos + piece * i, pos + piece * 2, piece, "lr");
             drawStarPos(pos + piece * i, pos + piece * 7, piece, "lr");
         }
+        gc.setGlobalAlpha(1);
     }
 
     public void drawBoardNum(int pos, int piece, boolean isReverse, ChessBoard.BoardSize style) {
-        // 绘制线路序号
+        // 绘制线路序号(深褐配色,与木底协调)
         double numberSize = getNumberSize(style);
         gc.setFont(Font.font(numberSize));
-        gc.setFill(Color.BLACK);
+        gc.setFill(Color.web("#4A2E12"));
+        gc.setGlobalAlpha(0.7);
         for (int i = 0; i < 9; i++) {
             // 黑方
             char number = (char) ('１' + i);
@@ -282,6 +299,7 @@ public abstract class BaseBoardRender implements BoardRender {
             // 红方
             gc.fillText(XiangqiUtils.map.get(number), isReverse ? xTop : xBottom, isReverse ? yTop : yBottom);
         }
+        gc.setGlobalAlpha(1);
     }
 
     private void drawStarPos(int x, int y, int w, String style) {
@@ -319,15 +337,15 @@ public abstract class BaseBoardRender implements BoardRender {
      * @return
      */
     private double getInnerRectWidth(ChessBoard.BoardSize style) {
-        return getOutRectWidth(style) / 2d;
+        return getOutRectWidth(style) * 0.7d;
     }
 
     /**
-     * 棋盘外矩形线条宽度
+     * 棋盘外矩形线条宽度(较原版加粗,形成外粗内细的刻线层次)
      * @return
      */
     private double getOutRectWidth(ChessBoard.BoardSize style) {
-        return getPieceSize(style) / 40d;
+        return getPieceSize(style) / 30d;
     }
 
     /**
