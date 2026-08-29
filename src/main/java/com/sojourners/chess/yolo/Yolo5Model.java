@@ -116,6 +116,9 @@ public class Yolo5Model extends OnnxModel {
                 return false;
             }
             int pieceWidth = boardPos.width / 8, pieceHeight = boardPos.height / 9;
+            // 同格多类别检测按置信度仲裁（#66/#70）：跨类检测框不互斥（NMS 按类分组），
+            // 若按遍历顺序覆盖，马/兵等相似棋子的重复检测会导致格子归属随机
+            float[][] cellConfidence = new float[10][9];
             // 再获取每个棋子及其位置
             for (DetectResult obj : results) {
                 char label = obj.label;
@@ -126,7 +129,10 @@ public class Yolo5Model extends OnnxModel {
                     if (i < 0 || i > 9 || j < 0 || j > 8) {
                         continue;
                     }
-                    board[i][j] = label;
+                    if (obj.confidence > cellConfidence[i][j]) {
+                        cellConfidence[i][j] = obj.confidence;
+                        board[i][j] = label;
+                    }
                 }
             }
             return true;
