@@ -210,6 +210,59 @@ public class GameSession {
         }
     }
 
+    /**
+     * 连线模式下设置走子/引擎联动（IT-7.5 迁入）：自动走棋走黑/红、观战开启分析。
+     */
+    public void setLinkMode(String t1) {
+        if (linkMode.getValue()) {
+            if ("自动走棋".equals(t1)) {
+                // 观战模式切换自动走棋，先停止引擎
+                host.getEngineController().stop();
+                // 走黑棋/红棋
+                if (isReverse.getValue()) {
+                    blackButton.setDisable(false);
+                    robotBlack.setValue(true);
+
+                    redButton.setDisable(true);
+                    robotRed.setValue(false);
+
+                    analysisButton.setDisable(true);
+                    robotAnalysis.setValue(false);
+
+                    if (!host.isRedGo()) {
+                        host.getEngineController().go();
+                    }
+                } else {
+                    redButton.setDisable(false);
+                    robotRed.setValue(true);
+
+                    blackButton.setDisable(true);
+                    robotBlack.setValue(false);
+
+                    analysisButton.setDisable(true);
+                    robotAnalysis.setValue(false);
+
+                    if (host.isRedGo()) {
+                        host.getEngineController().go();
+                    }
+                }
+            } else {
+                analysisButton.setDisable(false);
+                robotAnalysis.setValue(true);
+
+                blackButton.setDisable(true);
+                robotBlack.setValue(false);
+
+                redButton.setDisable(true);
+                robotRed.setValue(false);
+
+                immediateButton.setDisable(true);
+
+                host.getEngineController().go();
+            }
+        }
+    }
+
     public void switchPlayer(boolean f) {
         host.getEngineController().stop();
 

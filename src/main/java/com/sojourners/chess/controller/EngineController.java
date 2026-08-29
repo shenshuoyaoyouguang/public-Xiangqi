@@ -288,6 +288,37 @@ public class EngineController implements EngineCallBack {
         }
     }
 
+    public void initListView() {
+        listView.setCellFactory(new javafx.util.Callback() {
+            @Override
+            public Object call(Object param) {
+                javafx.scene.control.ListCell<ThinkData> cell = new javafx.scene.control.ListCell<ThinkData>() {
+                    @Override
+                    protected void updateItem(ThinkData item, boolean bln) {
+                        super.updateItem(item, bln);
+                        if (!bln) {
+                            javafx.scene.layout.VBox box = new javafx.scene.layout.VBox();
+
+                            Label title = new Label();
+                            title.setText(item.getTitle());
+                            setScoreStyle(title, item.getScore());
+                            box.getChildren().add(title);
+
+                            Label body = new Label();
+                            body.setText(item.getBody());
+                            body.setWrapText(true);
+                            body.setMaxWidth(listView.getWidth() / 1.124);
+                            box.getChildren().add(body);
+
+                            setGraphic(box);
+                        }
+                    }
+                };
+                return cell;
+            }
+        });
+    }
+
     public void initLineChart() {
         final NumberAxis xAxis = new NumberAxis();
         final NumberAxis yAxis = new NumberAxis(-1000, 1000, 500);

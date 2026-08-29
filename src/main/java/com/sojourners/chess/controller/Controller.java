@@ -589,35 +589,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
         // IT-7.3: 连线域
         linkController = new LinkController(this, linkComboBox);
         // 思考细节listView
-        listView.setCellFactory(new Callback() {
-            @Override
-            public Object call(Object param) {
-                ListCell<ThinkData> cell = new ListCell<ThinkData>() {
-                    @Override
-                    protected void updateItem(ThinkData item, boolean bln) {
-                        super.updateItem(item, bln);
-                        if (!bln) {
-                            VBox box = new VBox();
-
-                            Label title = new Label();
-                            title.setText(item.getTitle());
-                            engineController.setScoreStyle(title, item.getScore());
-                            box.getChildren().add(title);
-
-                            Label body = new Label();
-                            body.setText(item.getBody());
-                            body.setWrapText(true);
-                            body.setMaxWidth(listView.getWidth() / 1.124);//bind(listView.widthProperty().divide(1.124));
-                            box.getChildren().add(body);
-
-                            setGraphic(box);
-                        }
-                    }
-                };
-                return cell;
-            }
-
-        });
+        engineController.initListView();
         // 按钮
         setButtonTips();
         // 棋盘
@@ -897,53 +869,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
     }
 
     private void setLinkMode(String t1) {
-        if (linkMode.getValue()) {
-            if ("自动走棋".equals(t1)) {
-                // 观战模式切换自动走棋，先停止引擎
-                engineStop();
-                // 走黑棋/红棋
-                if (isReverse.getValue()) {
-                    blackButton.setDisable(false);
-                    robotBlack.setValue(true);
-
-                    redButton.setDisable(true);
-                    robotRed.setValue(false);
-
-                    analysisButton.setDisable(true);
-                    robotAnalysis.setValue(false);
-
-                    if (!redGo) {
-                        engineGo();
-                    }
-                } else {
-                    redButton.setDisable(false);
-                    robotRed.setValue(true);
-
-                    blackButton.setDisable(true);
-                    robotBlack.setValue(false);
-
-                    analysisButton.setDisable(true);
-                    robotAnalysis.setValue(false);
-
-                    if (redGo) {
-                        engineGo();
-                    }
-                }
-            } else {
-                analysisButton.setDisable(false);
-                robotAnalysis.setValue(true);
-
-                blackButton.setDisable(true);
-                robotBlack.setValue(false);
-
-                redButton.setDisable(true);
-                robotRed.setValue(false);
-
-                immediateButton.setDisable(true);
-
-                engineGo();
-            }
-        }
+        session.setLinkMode(t1);
     }
 
     private void addListener(Button button, ObjectProperty property) {
