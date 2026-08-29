@@ -1299,6 +1299,8 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
                 } else {
                     goCallBack(move);
                 }
+            } else {
+                log.log(System.Logger.Level.WARNING, "连线走子被拒绝（疑似送将或识别出非法着法），棋盘未更新: " + x1 + "," + y1 + " -> " + x2 + "," + y2);
             }
         });
     }

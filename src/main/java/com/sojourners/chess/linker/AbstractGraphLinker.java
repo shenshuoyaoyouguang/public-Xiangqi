@@ -46,6 +46,9 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
 
     private int count;
 
+    // 连续差异过大计数（IT-4.3 #64）：瞬态动画遮挡时等待识别恢复，避免误判新局面清空棋谱
+    private int diffErrorCount;
+
     private volatile boolean pause;
 
     private Properties prop;
@@ -154,9 +157,11 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
                     if (action != null) {
                         log.log(System.Logger.Level.INFO, "连线识别到走子操作: " + action);
                         if (action.flag == 1) {
+                            diffErrorCount = 0;
                             callBack.linkerMove(action.x1, action.y1, action.x2, action.y2);
 
                         } else if (action.flag == 2) {
+                            diffErrorCount = 0;
                             if (isReverse) {
                                 action.y1 = 9 - action.y1;
                                 action.y2 = 9 - action.y2;
@@ -166,7 +171,15 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
                             autoClick(action.x1, action.y1, action.x2, action.y2);
 
                         } else if (action.flag == 3) {
-                            break;
+                            // IT-4.3 #64: 将军等动画瞬态遮挡也会造成差异过大，
+                            // 连续多次才判定为新局面重新初始化，避免棋谱被误清空
+                            diffErrorCount++;
+                            if (diffErrorCount >= 3) {
+                                log.log(System.Logger.Level.INFO, "连线识别连续 " + diffErrorCount + " 次差异过大，判定为新局面，重新初始化棋盘");
+                                break;
+                            }
+                            log.log(System.Logger.Level.INFO, "连线识别差异过大（连续 " + diffErrorCount + " 次），等待识别恢复");
+                            continue;
                         }
                         if (action.flag == 4) {
                             count++;
