@@ -24,6 +24,13 @@ public class Engine {
 
     private String protocol;
 
+    private String engineName;
+
+    // 当前分析的 FEN 与 go 发起时间，用于 bestmove 时输出可定位现场（IT-4.1）
+    private volatile String currentFen;
+
+    private volatile long goStartTime;
+
     private AnalysisModel analysisModel;
     private long analysisValue;
 
@@ -60,6 +67,7 @@ public class Engine {
 
     public Engine(EngineConfig ec, EngineCallBack cb) throws IOException {
         this.protocol = ec.getProtocol();
+        this.engineName = ec.getName();
         this.cb = cb;
         this.random = new SecureRandom();
 
@@ -208,6 +216,7 @@ public class Engine {
         if (str.length < 2 || !validateMove(str[1])) {
             return;
         }
+        log.log(System.Logger.Level.INFO, "引擎分析完成 引擎=" + engineName + " 耗时=" + (System.currentTimeMillis() - goStartTime) + "ms fen=" + currentFen + " bestmove=" + str[1]);
         if (Properties.getInstance().getEngineDelayEnd() > 0 && Properties.getInstance().getEngineDelayEnd() >= Properties.getInstance().getEngineDelayStart()) {
             int t = random.nextInt(Properties.getInstance().getEngineDelayStart(), Properties.getInstance().getEngineDelayEnd());
             sleep(t);
@@ -322,6 +331,8 @@ public class Engine {
 
         StringBuilder sb = new StringBuilder();
         sb.append("position fen ").append(fenCode);
+        this.currentFen = fenCode;
+        this.goStartTime = System.currentTimeMillis();
         if (moves != null && moves.size() > 0) {
             sb.append(" moves");
             for (String move : moves) {

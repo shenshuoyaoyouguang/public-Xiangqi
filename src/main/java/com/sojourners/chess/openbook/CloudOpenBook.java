@@ -22,10 +22,11 @@ public class CloudOpenBook implements OpenBook {
     @Override
     public List<BookData> get(String fenCode, boolean onlyFinalPhase) {
         List<BookData> list = new ArrayList<>();
+        long start = System.currentTimeMillis();
         try {
             String content = "action=queryall&board=" + URLEncoder.encode(fenCode, "UTF-8");
             String result = HttpUtils.sendByGet(URL, content, Properties.getInstance().getCloudBookTimeout());
-            log.log(System.Logger.Level.DEBUG, "云库响应: " + result);
+            log.log(System.Logger.Level.DEBUG, "云库响应: fen=" + fenCode + " body=" + result);
 
             if (result != null && !result.isEmpty() && result.contains("move")) {
 
@@ -60,9 +61,10 @@ public class CloudOpenBook implements OpenBook {
             }
 
         } catch (Exception e) {
-            log.log(System.Logger.Level.WARNING, "查询云库响应失败", e);
+            log.log(System.Logger.Level.WARNING, "查询云库响应失败 fen=" + fenCode + " 耗时=" + (System.currentTimeMillis() - start) + "ms", e);
+            return list;
         }
-
+        log.log(System.Logger.Level.INFO, "云库查询完成 fen=" + fenCode + " 耗时=" + (System.currentTimeMillis() - start) + "ms 结果=" + list.size() + "条");
         return list;
     }
 

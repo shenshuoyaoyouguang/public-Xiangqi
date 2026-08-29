@@ -2,14 +2,20 @@ package com.sojourners.chess.linker;
 
 import com.sojourners.chess.board.ChessBoard;
 import com.sojourners.chess.config.Properties;
+import com.sojourners.chess.util.PathUtils;
 import com.sojourners.chess.util.XiangqiUtils;
 import com.sojourners.chess.yolo.OnnxModel;
 import com.sojourners.chess.yolo.Yolo11Model;
 
+import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.event.InputEvent;
 import java.awt.image.BufferedImage;
+import java.io.File;
+import java.nio.file.Files;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 
@@ -496,14 +502,18 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
 
 
     private boolean findChessBoard(char[][] board) {
+        long start = System.currentTimeMillis();
         // 截图
         BufferedImage img = screenshot(false);
         // ai识别棋盘棋子
-        if (!this.aiModel.findChessBoard(img, board)) {
+        boolean aiOk = this.aiModel.findChessBoard(img, board);
+        boolean valid = aiOk && XiangqiUtils.validateChessBoard(board);
+        log.log(System.Logger.Level.DEBUG, "连线识别耗时 " + (System.currentTimeMillis() - start) + "ms ai识别=" + (aiOk ? "成功" : "失败") + " 校验=" + (valid ? "通过" : "失败"));
+        if (!aiOk) {
+            saveFailedSample(img, null, start);
             return false;
         }
-        boolean f = XiangqiUtils.validateChessBoard(board);
-        if (!f) {
+        if (!valid) {
             StringBuilder sb = new StringBuilder();
             for (int i = 0; i < 10; i++) {
                 for (int j = 0; j < 9; j++) {
@@ -512,8 +522,50 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
                 sb.append('\n');
             }
             log.log(System.Logger.Level.DEBUG, "连线识别棋盘校验失败，识别结果:\n" + sb);
+            saveFailedSample(img, board, start);
+            return false;
         }
-        return f;
+        return true;
+    }
+
+    /**
+     * 识别失败样本留存（IT-4.2）：截图 + 识别结果 + 上下文存档到 samples/ 目录，
+     * 供识别质量专项（IT-13.x）分析。同一失败 10 秒内不重复留存，避免扫描循环刷盘。
+     */
+    private volatile long lastSampleTime;
+
+    private void saveFailedSample(BufferedImage img, char[][] board, long start) {
+        long now = System.currentTimeMillis();
+        if (now - lastSampleTime < 10_000) {
+            return;
+        }
+        lastSampleTime = now;
+        try {
+            File dir = new File(PathUtils.getJarPath() + "samples");
+            if (!dir.exists()) {
+                dir.mkdirs();
+            }
+            String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS").format(new Date());
+            File imgFile = new File(dir, "sample_" + stamp + ".png");
+            ImageIO.write(img, "png", imgFile);
+            StringBuilder sb = new StringBuilder();
+            sb.append("时间: ").append(stamp).append('\n');
+            sb.append("识别耗时: ").append(System.currentTimeMillis() - start).append("ms\n");
+            sb.append("失败类型: ").append(board == null ? "AI识别失败（未检出棋盘）" : "棋盘校验失败（识别结果非法）").append('\n');
+            if (board != null) {
+                sb.append("识别结果:\n");
+                for (int i = 0; i < 10; i++) {
+                    for (int j = 0; j < 9; j++) {
+                        sb.append(board[i][j]);
+                    }
+                    sb.append('\n');
+                }
+            }
+            Files.writeString(new File(dir, "sample_" + stamp + ".txt").toPath(), sb.toString());
+            log.log(System.Logger.Level.INFO, "连线识别失败，样本已留存: " + imgFile.getName());
+        } catch (Exception e) {
+            log.log(System.Logger.Level.WARNING, "识别失败样本留存失败", e);
+        }
     }
     private boolean reverse(char[][] board) throws Exception {
         // 是否翻转
