@@ -6,7 +6,7 @@ name: Release Artifacts
 on:
   workflow_dispatch:
   push:
-    tags: ['V*']
+    tags: ['V2*']
 
 jobs:
   package:
