@@ -12,6 +12,8 @@ public class CloudOpenBook implements OpenBook {
 
     private final static String URL = "http://www.chessdb.cn/chessdb.php";
 
+    private static final System.Logger log = System.getLogger(CloudOpenBook.class.getName());
+
     @Override
     public List<BookData> get(char[][] board, boolean redGo)  {
         return null;
@@ -23,7 +25,7 @@ public class CloudOpenBook implements OpenBook {
         try {
             String content = "action=queryall&board=" + URLEncoder.encode(fenCode, "UTF-8");
             String result = HttpUtils.sendByGet(URL, content, Properties.getInstance().getCloudBookTimeout());
-            System.out.println(result);
+            log.log(System.Logger.Level.DEBUG, "云库响应: " + result);
 
             if (result != null && !result.isEmpty() && result.contains("move")) {
 
@@ -58,7 +60,7 @@ public class CloudOpenBook implements OpenBook {
             }
 
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.WARNING, "查询云库响应失败", e);
         }
 
         return list;

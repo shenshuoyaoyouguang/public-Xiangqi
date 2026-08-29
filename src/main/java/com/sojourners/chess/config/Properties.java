@@ -20,6 +20,8 @@ public class Properties {
     public static final String DEFAULT_STEP_NUMBER_COLOR = "#FFFFFF";
     public static final double DEFAULT_STEP_OPACITY = 0.5d;
 
+    private static final System.Logger log = System.getLogger(Properties.class.getName());
+
     private static Properties prop;
 
     private ChessBoard.BoardSize boardSize;
@@ -157,7 +159,7 @@ public class Properties {
                     String text = Files.readString(jsonFile.toPath());
                     prop = JsonPropertiesCodec.fromJson(text);
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    log.log(System.Logger.Level.WARNING, "读取配置文件失败，使用默认配置", e);
                     prop = defaults();
                 }
             } else if (legacyFile.exists()) {
@@ -169,7 +171,7 @@ public class Properties {
                         legacyFile.delete();
                     }
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    log.log(System.Logger.Level.WARNING, "备份旧版配置文件失败", e);
                 }
                 prop = defaults();
             } else {
@@ -197,7 +199,7 @@ public class Properties {
             String json = JsonPropertiesCodec.toJson(this);
             Files.writeString(file.toPath(), json);
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.ERROR, "保存配置文件失败", e);
         }
     }
 

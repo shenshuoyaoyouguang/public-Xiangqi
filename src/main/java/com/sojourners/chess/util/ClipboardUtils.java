@@ -6,6 +6,9 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 
 public class ClipboardUtils {
+
+    private static final System.Logger log = System.getLogger(ClipboardUtils.class.getName());
+
     /**
      * 从剪切板获得文字。
      */
@@ -21,7 +24,7 @@ public class ClipboardUtils {
                 try {
                     ret = (String) clipTf.getTransferData(DataFlavor.stringFlavor);
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    log.log(System.Logger.Level.WARNING, "读取剪切板文本失败", e);
                 }
             }
         }
@@ -64,7 +67,7 @@ public class ClipboardUtils {
                 // 返回已经画好的bufferedImage对象
                 return bufferedImage;
             } catch (Exception e) {
-                e.printStackTrace();
+                log.log(System.Logger.Level.WARNING, "读取剪切板图片失败", e);
             }
         }
         return null;

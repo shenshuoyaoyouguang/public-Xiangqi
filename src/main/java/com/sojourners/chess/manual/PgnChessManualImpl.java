@@ -12,6 +12,8 @@ import java.nio.file.Files;
 
 public class PgnChessManualImpl implements ChessManualService {
 
+    private static final System.Logger log = System.getLogger(PgnChessManualImpl.class.getName());
+
     private static final Charset[] CHARSETS_TO_TRY = {
         StandardCharsets.UTF_8,
         Charset.forName("GBK"),
@@ -97,7 +99,7 @@ public class PgnChessManualImpl implements ChessManualService {
             String content = readFileWithEncodingDetection(file);
             return getChessManualFromText(content);
         } catch (IOException e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.WARNING, "读取棋谱文件失败", e);
             return null;
         }
     }
@@ -258,7 +260,7 @@ public class PgnChessManualImpl implements ChessManualService {
         try {
             Files.writeString(file.toPath(), sb.toString(), StandardCharsets.UTF_8);
         } catch (IOException e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.ERROR, "保存棋谱文件失败", e);
         }
     }
 

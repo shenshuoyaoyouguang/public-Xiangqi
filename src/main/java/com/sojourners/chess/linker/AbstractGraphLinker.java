@@ -15,6 +15,8 @@ import java.util.List;
 
 public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
 
+    private static final System.Logger log = System.getLogger(AbstractGraphLinker.class.getName());
+
     /**
      * 扫描线程
      */
@@ -108,7 +110,7 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
                     try {
                         isReverse = reverse(board2);
                     } catch (Exception e) {
-                        e.printStackTrace();
+                        log.log(System.Logger.Level.WARNING, "识别棋盘翻转状态失败，跳过本次扫描", e);
                         continue;
                     }
 
@@ -132,7 +134,7 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
                             try {
                                 isReverse = reverse(board2);
                             } catch (Exception e) {
-                                e.printStackTrace();
+                                log.log(System.Logger.Level.WARNING, "确认走子动画时识别棋盘翻转状态失败", e);
                                 f = true;
                                 break;
                             }
@@ -144,7 +146,7 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
                     }
 
                     if (action != null) {
-                        System.out.println("action " + action);
+                        log.log(System.Logger.Level.INFO, "连线识别到走子操作: " + action);
                         if (action.flag == 1) {
                             callBack.linkerMove(action.x1, action.y1, action.x2, action.y2);
 
@@ -410,7 +412,7 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
         try {
             Thread.sleep(time);
         } catch (InterruptedException e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.WARNING, "连线扫描线程休眠被中断", e);
             Thread.currentThread().interrupt();
         }
     }
@@ -502,12 +504,14 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
         }
         boolean f = XiangqiUtils.validateChessBoard(board);
         if (!f) {
+            StringBuilder sb = new StringBuilder();
             for (int i = 0; i < 10; i++) {
                 for (int j = 0; j < 9; j++) {
-                    System.out.print(board[i][j]);
+                    sb.append(board[i][j]);
                 }
-                System.out.println();
+                sb.append('\n');
             }
+            log.log(System.Logger.Level.DEBUG, "连线识别棋盘校验失败，识别结果:\n" + sb);
         }
         return f;
     }
@@ -552,7 +556,7 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
         try {
             isReverse = reverse(board2);
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.WARNING, "初始化连线棋盘时识别翻转状态失败", e);
             return false;
         }
         // 是否红走

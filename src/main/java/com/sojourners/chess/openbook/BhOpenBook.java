@@ -10,6 +10,8 @@ import java.util.List;
 
 public class BhOpenBook implements OpenBook {
 
+    private static final System.Logger log = System.getLogger(BhOpenBook.class.getName());
+
     private Connection connection;
 
     private String name;
@@ -62,7 +64,7 @@ public class BhOpenBook implements OpenBook {
             }
 
         } catch (SQLException e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.ERROR, "查询本地开局库失败", e);
         }
 
         return results;
@@ -79,7 +81,7 @@ public class BhOpenBook implements OpenBook {
             this.connection.close();
 
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.WARNING, "关闭本地开局库连接失败", e);
         }
     }
 }

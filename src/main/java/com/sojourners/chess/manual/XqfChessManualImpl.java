@@ -13,6 +13,8 @@ import java.util.List;
  */
 public class XqfChessManualImpl implements ChessManualService {
 
+    private static final System.Logger log = System.getLogger(XqfChessManualImpl.class.getName());
+
     // 32个棋子的FEN表示顺序: 红方车马相士帅士相马车炮炮兵兵兵兵兵 + 黑方车马象士将士象马车炮炮卒卒卒卒卒
     private static final String FEN_PIECES = "RNBAKABNRCCPPPPPrnbakabnrccppppp";
 
@@ -32,7 +34,7 @@ public class XqfChessManualImpl implements ChessManualService {
 
             return parseXqfFile(buffer);
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.WARNING, "解析 XQF 棋谱文件失败", e);
             return null;
         }
     }

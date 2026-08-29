@@ -27,6 +27,8 @@ import java.net.URL;
  */
 public class App extends Application {
 
+    private static final System.Logger log = System.getLogger(App.class.getName());
+
     // 版本信息由构建期经资源过滤注入 build.properties，版本单一真源为 pom.xml
     public static final String VERSION = loadBuildProperty("version");
     public static final String BUILT_ON = loadBuildProperty("builtOn");
@@ -205,7 +207,7 @@ public class App extends Application {
             return controller.getFenCode();
 
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.ERROR, "打开局面编辑对话框失败", e);
             return null;
         }
     }
@@ -231,7 +233,7 @@ public class App extends Application {
             stage.showAndWait();
             return controller.isSaved();
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.ERROR, "打开主题配置对话框失败", e);
             return false;
         }
     }
@@ -285,7 +287,7 @@ public class App extends Application {
             stage.setScene(scene);
             return stage;
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.ERROR, "创建对话框窗口失败", e);
             return null;
         }
     }

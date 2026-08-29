@@ -9,6 +9,8 @@ import java.util.Map;
 
 public class XiangqiUtils {
 
+    private static final System.Logger log = System.getLogger(XiangqiUtils.class.getName());
+
     public static final Map<Character, Character> cnMap = new HashMap<>(32);
     public static final Map<Character, String> map = new HashMap<>(32);
 
@@ -722,7 +724,7 @@ public class XiangqiUtils {
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.WARNING, "解析 FEN 失败: " + fenCode, e);
         }
     }
 

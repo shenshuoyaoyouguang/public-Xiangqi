@@ -11,6 +11,8 @@ import java.awt.image.BufferedImage;
  */
 public class MacosGraphLinker extends AbstractGraphLinker {
 
+    private static final System.Logger log = System.getLogger(MacosGraphLinker.class.getName());
+
     private String windowId;
 
     public MacosGraphLinker(LinkerCallBack callBack) throws AWTException {
@@ -39,7 +41,7 @@ public class MacosGraphLinker extends AbstractGraphLinker {
         };
         String result = ShellUtils.exec(cmd);
         if (result == null || result.isEmpty()) {
-            System.out.println(this.windowId + " getTargetWindowPosition failed");
+            log.log(System.Logger.Level.INFO, "获取目标窗口位置失败, windowId: " + this.windowId);
             return new Rectangle();
         }
         String[] ss = result.split(",");

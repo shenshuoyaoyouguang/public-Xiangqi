@@ -12,6 +12,8 @@ import java.time.Duration;
  */
 public class HttpUtils {
 
+    private static final System.Logger log = System.getLogger(HttpUtils.class.getName());
+
     private static final HttpClient CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
@@ -29,7 +31,7 @@ public class HttpUtils {
             HttpResponse<String> resp = CLIENT.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             return resp.statusCode() / 100 == 2 ? resp.body() : null;
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.WARNING, "HTTP 请求失败: " + url, e);
             return null;
         }
     }

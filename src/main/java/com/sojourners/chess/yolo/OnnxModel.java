@@ -9,6 +9,8 @@ import java.awt.image.BufferedImage;
 
 public abstract class OnnxModel {
 
+    private static final System.Logger log = System.getLogger(OnnxModel.class.getName());
+
     public static final double PADDING = 0.8d;
 
     public final float CONFIDENCE = 0.75f;
@@ -33,7 +35,7 @@ public abstract class OnnxModel {
             session = env.createSession(path, opt);
 
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.WARNING, "加载 ONNX 模型失败", e);
         }
     }
 

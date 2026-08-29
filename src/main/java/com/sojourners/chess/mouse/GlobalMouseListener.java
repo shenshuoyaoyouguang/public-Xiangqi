@@ -8,10 +8,12 @@ import org.jnativehook.mouse.NativeMouseInputListener;
 
 public class GlobalMouseListener implements NativeMouseInputListener {
 
+    private static final System.Logger log = System.getLogger(GlobalMouseListener.class.getName());
+
     private MouseListenCallBack cb;
 
     public void nativeMouseClicked(NativeMouseEvent e) {
-        System.out.println("Mouse Clicked: " + e.getClickCount());
+        log.log(System.Logger.Level.DEBUG, "全局鼠标钩子捕获点击: " + e.getClickCount());
 
         this.cb.mouseClick();
     }

@@ -9,6 +9,8 @@ import java.util.List;
 
 public class OpenBookManager {
 
+    private static final System.Logger log = System.getLogger(OpenBookManager.class.getName());
+
     private volatile static OpenBookManager instance;
 
     private OpenBook cloudOpenBook;
@@ -42,7 +44,7 @@ public class OpenBookManager {
                     localOpenBooks.add(new PfOpenBook(path));
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                log.log(System.Logger.Level.WARNING, "加载本地开局库失败: " + path, e);
             }
         }
     }

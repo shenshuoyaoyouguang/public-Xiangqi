@@ -8,6 +8,9 @@ import java.io.File;
  * Path 工具类
  */
 public class PathUtils {
+
+    private static final System.Logger log = System.getLogger(PathUtils.class.getName());
+
     public static String getJarPath() {
         try {
             String path = PathUtils.class.getProtectionDomain().getCodeSource().getLocation().getPath();
@@ -21,7 +24,7 @@ public class PathUtils {
             }
             return path;
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.ERROR, "获取程序 jar 路径失败", e);
             return null;
         }
     }

@@ -18,6 +18,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class Engine {
 
+    private static final System.Logger log = System.getLogger(Engine.class.getName());
+
     private Process process;
 
     private String protocol;
@@ -77,7 +79,7 @@ public class Engine {
             try {
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    System.out.println(line);
+                    log.log(System.Logger.Level.DEBUG, "引擎输出: " + line);
                     if (line.contains("depth") || line.contains("nps")) {
                         thinkDetail(line);
                     } else if (line.contains("bestmove")) {
@@ -85,7 +87,7 @@ public class Engine {
                     }
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                log.log(System.Logger.Level.ERROR, "读取引擎输出异常", e);
             }
         });
 
@@ -108,7 +110,7 @@ public class Engine {
         try {
             Thread.sleep(t);
         } catch (InterruptedException e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.WARNING, "引擎等待延时被中断", e);
         }
     }
 
@@ -141,7 +143,7 @@ public class Engine {
                         }
                     }
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    log.log(System.Logger.Level.ERROR, "测试引擎时读取输出异常", e);
                 }
             })).start();
 
@@ -162,7 +164,7 @@ public class Engine {
             return null;
 
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.ERROR, "测试引擎异常", e);
             return null;
         } finally {
             if (p != null) {
@@ -179,7 +181,7 @@ public class Engine {
                     br.close();
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                log.log(System.Logger.Level.WARNING, "关闭引擎测试流异常", e);
             }
         }
     }
@@ -290,7 +292,7 @@ public class Engine {
             if (Properties.getInstance().getBookSwitch()) {
                 long s = System.currentTimeMillis();
                 List<BookData> results = OpenBookManager.getInstance().queryBook(board, redGo, moves.size() / 2 >= Properties.getInstance().getOffManualSteps());
-                System.out.println("查询库时间" + (System.currentTimeMillis() - s));
+                log.log(System.Logger.Level.DEBUG, "查询库时间" + (System.currentTimeMillis() - s));
                 this.cb.showBookResults(results);
                 if (results.size() > 0 && this.analysisModel != AnalysisModel.INFINITE) {
                     if (Properties.getInstance().getBookDelayEnd() > 0 && Properties.getInstance().getBookDelayEnd() >= Properties.getInstance().getBookDelayStart()) {
@@ -357,12 +359,12 @@ public class Engine {
     }
 
     private void cmd(String command) {
-        System.out.println(command);
+        log.log(System.Logger.Level.DEBUG, "引擎命令: " + command);
         try {
             writer.write(command + System.getProperty("line.separator"));
             writer.flush();
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.ERROR, "向引擎发送命令失败", e);
         }
     }
 
@@ -407,7 +409,7 @@ public class Engine {
                 writer.close();
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.WARNING, "关闭引擎进程异常", e);
         }
     }
 }

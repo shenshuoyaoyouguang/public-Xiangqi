@@ -11,6 +11,8 @@ import java.util.List;
 
 public class XqbOpenBook implements OpenBook {
 
+    private static final System.Logger log = System.getLogger(XqbOpenBook.class.getName());
+
     private Connection connection;
 
     private String name;
@@ -40,7 +42,7 @@ public class XqbOpenBook implements OpenBook {
             this.connection.close();
 
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.WARNING, "关闭本地开局库连接失败", e);
         }
     }
 
@@ -223,7 +225,7 @@ public class XqbOpenBook implements OpenBook {
             }
 
         } catch (SQLException e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.ERROR, "查询本地开局库失败", e);
         }
 
         return results;

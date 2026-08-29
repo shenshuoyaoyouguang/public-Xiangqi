@@ -5,6 +5,8 @@ import java.io.LineNumberReader;
 
 public class ShellUtils {
 
+    private static final System.Logger log = System.getLogger(ShellUtils.class.getName());
+
     public static String exec(String command) {
         String[] cmd = { "bash", "-c", command};
          return exec(cmd);
@@ -25,7 +27,7 @@ public class ShellUtils {
             p.destroy();
             return sb.toString();
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.ERROR, "执行 shell 命令失败: " + String.join(" ", cmd), e);
             return null;
         }
     }

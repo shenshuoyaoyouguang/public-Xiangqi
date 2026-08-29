@@ -13,6 +13,8 @@ import java.awt.image.BufferedImage;
 
 public class WindowsGraphLinker extends AbstractGraphLinker implements MouseListenCallBack {
 
+    private static final System.Logger log = System.getLogger(WindowsGraphLinker.class.getName());
+
     private WinDef.HWND hwnd;
     private GlobalMouseListener listener;
     private double screenScalingFactor;
@@ -32,7 +34,7 @@ public class WindowsGraphLinker extends AbstractGraphLinker implements MouseList
             selectCursor();
 
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.ERROR, "启动全局鼠标监听失败", e);
         }
     }
     @Override
@@ -50,7 +52,7 @@ public class WindowsGraphLinker extends AbstractGraphLinker implements MouseList
             scan();
 
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.ERROR, "处理鼠标点击选定连线目标窗口失败", e);
         }
 
     }
@@ -170,7 +172,7 @@ public class WindowsGraphLinker extends AbstractGraphLinker implements MouseList
             return image;
 
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.ERROR, "连线后台截图失败", e);
             return null;
         } finally {
             // 清理设备上下文对象

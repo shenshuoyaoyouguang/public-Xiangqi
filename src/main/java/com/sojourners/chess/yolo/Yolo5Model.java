@@ -13,6 +13,8 @@ import java.util.*;
 
 public class Yolo5Model extends OnnxModel {
 
+    private static final System.Logger log = System.getLogger(Yolo5Model.class.getName());
+
     @Override
     public String getModelPath() {
         return "model/middle.onnx";
@@ -57,7 +59,7 @@ public class Yolo5Model extends OnnxModel {
             return pos;
 
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.WARNING, "识别棋盘位置失败", e);
             return null;
         }
     }
@@ -130,7 +132,7 @@ public class Yolo5Model extends OnnxModel {
             return true;
 
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.WARNING, "识别棋盘棋子失败", e);
             return false;
         }
     }
@@ -160,7 +162,7 @@ public class Yolo5Model extends OnnxModel {
         }
 
 //        System.gc();
-        System.out.println(System.currentTimeMillis() - s);
+        log.log(System.Logger.Level.DEBUG, "识别耗时" + (System.currentTimeMillis() - s));
         return list;
     }
 

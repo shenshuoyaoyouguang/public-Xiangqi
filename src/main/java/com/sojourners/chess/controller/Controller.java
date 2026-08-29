@@ -56,6 +56,8 @@ import java.util.List;
 
 public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCallBack {
 
+    private static final System.Logger log = System.getLogger(Controller.class.getName());
+
     @FXML
     private Canvas canvas;
 
@@ -532,7 +534,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
                 RenderedImage renderedImage = SwingFXUtils.fromFXImage(writableImage, null);
                 ImageIO.write(renderedImage, "png", file);
             } catch (IOException ex) {
-                ex.printStackTrace();
+                log.log(System.Logger.Level.ERROR, "导出棋盘图片失败", ex);
             }
         }
     }
@@ -726,7 +728,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
                 importFromBufferImage(img);
 
             } catch (IOException e) {
-                e.printStackTrace();
+                log.log(System.Logger.Level.ERROR, "读取棋盘图片文件失败", e);
             }
         }
     }
@@ -959,7 +961,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
                     new WindowsGraphLinker(this) : (com.sun.jna.Platform.isLinux() ?
                     new LinuxGraphLinker(this) : new MacosGraphLinker(this));
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.ERROR, "初始化连线器失败", e);
         }
 
         linkComboBox.getItems().addAll("自动走棋", "观战模式");
@@ -1115,7 +1117,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            log.log(System.Logger.Level.ERROR, "加载引擎失败", e);
         }
     }
 
@@ -1291,7 +1293,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
             if (move != null) {
                 boolean red = XiangqiUtils.isRed(board.getBoard()[y2][x2]);
                 if (isWatchMode() && (!redGo && red || redGo && !red)) {
-                    System.out.println(move + "," + red + ", " + redGo);
+                    log.log(System.Logger.Level.INFO, "连线识别行棋方可能错误，走子: " + move + "," + red + ", " + redGo);
                     // 连线识别行棋方错误，自动切换行棋方
                     switchPlayer(false);
                 } else {
