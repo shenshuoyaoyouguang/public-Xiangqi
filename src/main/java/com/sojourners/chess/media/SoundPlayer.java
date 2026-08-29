@@ -16,31 +16,43 @@ public class SoundPlayer {
     private AudioClip over;
 
     public SoundPlayer(String pickSound, String moveSound, String eatSound, String checkSound, String overSound) {
-        pick = new AudioClip(new File(pickSound).toURI().toString());
-        move = new AudioClip(new File(moveSound).toURI().toString());
-        eat = new AudioClip(new File(eatSound).toURI().toString());
-        check = new AudioClip(new File(checkSound).toURI().toString());
-        over = new AudioClip(new File(overSound).toURI().toString());
+        pick = safeClip(pickSound);
+        move = safeClip(moveSound);
+        eat = safeClip(eatSound);
+        check = safeClip(checkSound);
+        over = safeClip(overSound);
+    }
+
+    /**
+     * 音频加载失败（无声卡设备、文件缺失等 headless 环境）时降级为静音，不阻断启动
+     */
+    private AudioClip safeClip(String sound) {
+        try {
+            return new AudioClip(new File(sound).toURI().toString());
+        } catch (Exception e) {
+            System.getLogger(SoundPlayer.class.getName()).log(System.Logger.Level.WARNING, "音效加载失败，静音降级: " + sound, e);
+            return null;
+        }
     }
 
     public void eat() {
-        eat.play();
+        if (eat != null) eat.play();
     }
 
     public void pick() {
-        pick.play();
+        if (pick != null) pick.play();
     }
 
     public void move() {
-        move.play();
+        if (move != null) move.play();
     }
 
     public void check() {
-        check.play();
+        if (check != null) check.play();
     }
 
     public void over() {
-        over.play();
+        if (over != null) over.play();
     }
 
 }
