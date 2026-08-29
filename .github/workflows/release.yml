@@ -1,0 +1,76 @@
+name: Release Artifacts
+
+# IT-1.2: 三平台 jpackage 产物构建，产物作为 artifact 上传。
+# 说明：javafx:jlink 因依赖含 automatic module（jna/jnativehook）不可用，
+# 改用 jpackage app-image/dmg（与历史 release 的 7z/dmg/tar.gz 形态一致）。
+on:
+  workflow_dispatch:
+  push:
+    tags: ['V*']
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: windows_x64
+          - os: ubuntu-latest
+            artifact: linux_x64
+          - os: macos-latest
+            artifact: macos_arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build jar, dependencies and staging directory
+        run: |
+          VERSION=$(mvn -B help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          mvn -B package -DskipTests
+          mvn -B dependency:copy-dependencies -DoutputDirectory=target/deps -DincludeScope=runtime
+          mkdir -p target/staging
+          cp target/deps/* target/staging/
+          cp target/Xiangqi-*.jar target/staging/
+          # 应用按约定从 jar 旁目录读取外部资源（model/sound/ui），一并打入 app 目录
+          cp -r src/main/resources/model src/main/resources/sound src/main/resources/ui src/main/resources/font target/staging/
+
+      - name: jpackage (windows app-image)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          jpackage --type app-image --name TCHESS --input target/staging \
+            --main-jar Xiangqi-$VERSION.jar --main-class com.sojourners.chess.Main \
+            --app-version $VERSION --dest target/dist
+          powershell -Command "Compress-Archive -Path target/dist/TCHESS -DestinationPath tchess_$env:VERSION_${{ matrix.artifact }}.zip"
+
+      - name: jpackage (linux app-image)
+        if: runner.os == 'Linux'
+        run: |
+          jpackage --type app-image --name TCHESS --input target/staging \
+            --main-jar Xiangqi-$VERSION.jar --main-class com.sojourners.chess.Main \
+            --app-version $VERSION --dest target/dist
+          tar -czf "tchess_${VERSION}_${{ matrix.artifact }}.tar.gz" -C target/dist TCHESS
+
+      - name: jpackage (macos dmg)
+        if: runner.os == 'macOS'
+        run: |
+          jpackage --type dmg --name TCHESS --input target/staging \
+            --main-jar Xiangqi-$VERSION.jar --main-class com.sojourners.chess.Main \
+            --app-version $VERSION --dest target/dist
+          mv target/dist/*.dmg "tchess_${VERSION}_${{ matrix.artifact }}.dmg"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tchess_${{ env.VERSION }}_${{ matrix.artifact }}
+          path: tchess_*
