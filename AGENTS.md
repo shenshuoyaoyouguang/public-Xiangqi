@@ -27,7 +27,7 @@ mvn javafx:run         # 运行桌面程序
 - `jna` — Win32 API 调用（仅 Windows 可用）；`mouse` — jnativehook 全局鼠标钩子
 - `manual` — 棋谱解析（PGN/XQF/TXQ 实现）
 - `openbook` — 开局库（多格式文件 + 云端 `CloudOpenBook`）
-- `config` — `Properties` 单例 + `JsonPropertiesCodec`（手写 JSON 序列化，无依赖），配置存于 jar 同目录 `properties.json`
+- `config` — `Properties` 单例 + `JsonPropertiesCodec`（反射驱动 JSON 序列化，无第三方依赖），配置存于 jar 同目录 `properties.json`
 - `model` — 纯数据类
 
 ## 关键约定与坑
