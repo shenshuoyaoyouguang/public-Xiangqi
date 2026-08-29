@@ -121,7 +121,45 @@
                 <configuration>
                     <!-- 项目为 JPMS 模块，测试走 classpath（JUnit 无需写入 module-info） -->
                     <useModulePath>false</useModulePath>
+                    <!-- IT-3.3: 覆盖率 agent。destfile 用相对路径保持 fork 命令行全 ASCII，
+                         规避中文项目路径经 cmd.exe 传递导致 exec 写不出的问题 -->
+                    <argLine>-javaagent:${settings.localRepository}/org/jacoco/org.jacoco.agent/0.8.12/org.jacoco.agent-0.8.12-runtime.jar=destfile=target/jacoco.exec</argLine>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <executions>
+                    <execution>
+                        <id>coverage-check</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <!-- IT-3.3: 分支覆盖率门禁。
+                                     规则类（canGo/isJiang/isSha/fenToBoard/validateChessBoard）已全分支深测；
+                                     翻译域（translate/translateCnMove/getSameFilePrefix）深测在口碑修复迭代补齐后收紧至 0.70 -->
+                                <rule>
+                                    <element>CLASS</element>
+                                    <includes>
+                                        <include>com.sojourners.chess.util.XiangqiUtils</include>
+                                        <include>com.sojourners.chess.config.JsonPropertiesCodec</include>
+                                    </includes>
+                                    <limits>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.40</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
