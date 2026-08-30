@@ -48,6 +48,7 @@ class JsonPropertiesCodecTest {
         p.setLinkAnimation(false);
         p.setLinkShowInfo(false);
         p.setLinkBackMode(true);
+        p.setPonderEnable(true);
         p.setEngineDelayStart(10);
         p.setEngineDelayEnd(20);
         p.setBookDelayStart(30);
@@ -128,6 +129,7 @@ class JsonPropertiesCodecTest {
         assertEquals(p.getCloudBookTimeout(), q.getCloudBookTimeout());
         assertEquals(p.getOffManualSteps(), q.getOffManualSteps());
         assertEquals(p.getBookSwitch(), q.getBookSwitch());
+        assertEquals(p.getPonderEnable(), q.getPonderEnable());
         assertEquals(p.getChessManualPath(), q.getChessManualPath());
         assertEquals(p.getMoveRule(), q.getMoveRule());
         assertEquals(p.getOpenBookList(), q.getOpenBookList());

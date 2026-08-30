@@ -115,6 +115,10 @@ public class EngineController implements EngineCallBack {
         }
     }
 
+    public boolean isPondering() {
+        return engine != null && engine.isPondering();
+    }
+
     public void go() {
         if (engine == null) {
             DialogUtils.showWarningDialog("提示", "引擎未加载");

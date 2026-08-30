@@ -25,6 +25,8 @@ public class LinkSettingController {
     private TextField linkMoveTime;
     @FXML
     private CheckBox linkManualMoveBox;
+    @FXML
+    private CheckBox ponderBox;
 
     private Properties prop;
 
@@ -68,6 +70,7 @@ public class LinkSettingController {
         }
         prop.setLinkMoveTime(txt.isEmpty() ? null : Integer.parseInt(txt));
         prop.setLinkManualMove(linkManualMoveBox.isSelected());
+        prop.setPonderEnable(ponderBox.isSelected());
 
         App.closeLinkSetting();
     }
@@ -92,6 +95,7 @@ public class LinkSettingController {
         mouseMoveDelay.setText(String.valueOf(prop.getMouseMoveDelay()));
         linkMoveTime.setText(prop.getLinkMoveTime() == null ? "0" : String.valueOf(prop.getLinkMoveTime()));
         linkManualMoveBox.setSelected(Boolean.TRUE.equals(prop.getLinkManualMove()));
+        ponderBox.setSelected(Boolean.TRUE.equals(prop.getPonderEnable()));
 
     }
 

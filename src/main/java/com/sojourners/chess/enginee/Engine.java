@@ -48,8 +48,9 @@ public class Engine {
      */
     private volatile boolean stopFlag;
 
-    // IT-11.1: ponder 后台思考状态
+    // IT-11.1: ponder 后台思考状态（ponderhitSent：已通知引擎命中，其后的 bestmove 为本方回合着法）
     private volatile boolean pondering;
+    private volatile boolean ponderhitSent;
     private volatile long time;
 
     private BufferedReader reader;
@@ -217,6 +218,12 @@ public class Engine {
             stopFlag = false;
             return;
         }
+        if (pondering && !ponderhitSent) {
+            // 未经 ponderhit 的 ponder 搜索结果是预测局面的应手而非当前局面的，丢弃
+            pondering = false;
+            ponderhitSent = false;
+            return;
+        }
         pondering = false;
 
         String[] str = msg.split(" ");
@@ -374,6 +381,7 @@ public class Engine {
     public void stop() {
         stopFlag = true;
         pondering = false;
+        ponderhitSent = false;
         cmd("stop");
     }
 
@@ -395,14 +403,30 @@ public class Engine {
         }
         sb.append(" ").append(ponderMove);
         cmd(sb.toString());
-        cmd("go ponder");
+        // go ponder 必须带上与常规 go 一致的时限参数：ponderhit 后引擎据此收束并返回 bestmove，
+        // 否则命中后无限搜索挂起；searchmoves 属于上一局面的根节点，不带入
+        cmd("go ponder" + ponderLimit());
         pondering = true;
+        ponderhitSent = false;
     }
 
     public void ponderhit() {
-        if (pondering) {
+        if (pondering && !ponderhitSent) {
             cmd("ponderhit");
+            ponderhitSent = true;
         }
+    }
+
+    // 按当前分析模型拼装 go ponder 的时限参数（INFINITE 无参数）
+    private String ponderLimit() {
+        if (analysisModel == AnalysisModel.FIXED_STEPS) {
+            return " depth " + analysisValue;
+        } else if (analysisModel == AnalysisModel.FIXED_TIME) {
+            return " movetime " + analysisValue;
+        } else if (analysisModel == AnalysisModel.FIXED_NODES) {
+            return " nodes " + analysisValue;
+        }
+        return "";
     }
 
     public boolean isPondering() {

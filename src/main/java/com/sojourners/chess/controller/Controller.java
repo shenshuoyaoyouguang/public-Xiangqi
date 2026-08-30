@@ -460,7 +460,8 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
             // 对手走子与引擎预测比较：命中则 ponderhit 继续计算，落空则废弃后走常规分析
             String expected = pendingPonderMove;
             pendingPonderMove = null;
-            if (move.equals(expected) && Boolean.TRUE.equals(prop.getPonderEnable())) {
+            // 引擎已不在 ponder（新建/悔棋等 stop 过）时视为落空，走常规分析
+            if (move.equals(expected) && Boolean.TRUE.equals(prop.getPonderEnable()) && engineController.isPondering()) {
                 applyMoveBookkeeping(move);
                 engineController.ponderhit();
                 return; // 引擎已在算该局面，无需重启分析
@@ -941,9 +942,9 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
         if (redGo && robotRed.getValue() || !redGo && robotBlack.getValue()) {
             ChessBoard.Step s = board.stepForBoard(first);
 
-            // IT-11.1 #68: 引擎给出 ponder 预测应手且启用后台思考时（人机对弈，连线模式暂不启用），
+            // IT-11.1 #68: 引擎给出 ponder 预测应手且启用后台思考（人机对弈与连线模式）时，
             // 走子应用后立即以预测应手启动 ponder 后台计算
-            if (Boolean.TRUE.equals(prop.getPonderEnable()) && second != null && !linkMode.getValue()) {
+            if (Boolean.TRUE.equals(prop.getPonderEnable()) && second != null) {
                 startPonderOnNextMove = true;
                 pendingPonderMove = second;
             }
