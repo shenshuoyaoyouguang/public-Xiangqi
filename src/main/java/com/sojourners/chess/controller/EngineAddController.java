@@ -55,6 +55,10 @@ public class EngineAddController {
                 Alert alert = new Alert(Alert.AlertType.ERROR);
                 alert.setTitle("提示");
                 alert.setHeaderText("无效的引擎文件");
+                alert.showAndWait();
+                protocolText.setText("");
+                showOptions();
+                return;
             }
             protocolText.setText(protocol);
             showOptions();
@@ -82,12 +86,38 @@ public class EngineAddController {
             alert.setHeaderText("引擎协议不正确");
             return;
         }
+        String name = nameText.getText() == null ? "" : nameText.getText().trim();
+        if (name.isEmpty()) {
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("提示");
+            alert.setHeaderText("引擎名称不能为空");
+            alert.showAndWait();
+            return;
+        }
         if (ec == null) {
-            // 添加引擎
-            prop.getEngineConfigList().add(new EngineConfig(nameText.getText(), pathText.getText(), protocolText.getText(), options));
+            // 添加引擎：重名校验
+            for (EngineConfig exist : prop.getEngineConfigList()) {
+                if (name.equalsIgnoreCase(exist.getName())) {
+                    Alert alert = new Alert(Alert.AlertType.ERROR);
+                    alert.setTitle("提示");
+                    alert.setHeaderText("已存在同名引擎：" + exist.getName());
+                    alert.showAndWait();
+                    return;
+                }
+            }
+            prop.getEngineConfigList().add(new EngineConfig(name, pathText.getText(), protocolText.getText(), options));
         } else {
-            // 编辑引擎
-            ec.setName(nameText.getText());
+            // 编辑引擎：与其他引擎名校验（排除自己）
+            for (EngineConfig exist : prop.getEngineConfigList()) {
+                if (exist != ec && name.equalsIgnoreCase(exist.getName())) {
+                    Alert alert = new Alert(Alert.AlertType.ERROR);
+                    alert.setTitle("提示");
+                    alert.setHeaderText("已存在同名引擎：" + exist.getName());
+                    alert.showAndWait();
+                    return;
+                }
+            }
+            ec.setName(name);
             ec.setPath(pathText.getText());
             ec.setProtocol(protocolText.getText());
             ec.setOptions(options);

@@ -8,6 +8,7 @@ import com.sojourners.chess.board.DefaultBoardRender;
 import com.sojourners.chess.config.Properties;
 import com.sojourners.chess.util.DialogUtils;
 import com.sojourners.chess.util.XiangqiUtils;
+import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.control.ToggleGroup;
@@ -101,7 +102,7 @@ public class EditChessBoardController {
     }
 
     @FXML
-    void cleanChessBoard(MouseEvent event) {
+    void cleanChessBoard(ActionEvent event) {
         for (int i = 0; i < board.length; i++) {
             for (int j = 0; j < board[0].length; j++) {
                 board[i][j] = ' ';
@@ -111,13 +112,13 @@ public class EditChessBoardController {
     }
 
     @FXML
-    void initChessBoard(MouseEvent event) {
+    void initChessBoard(ActionEvent event) {
         ChessBoard.initChessBoard(board);
         paint();
     }
 
     @FXML
-    void lrReverse(MouseEvent event) {
+    void lrReverse(ActionEvent event) {
         for (int i = 0; i < board.length; i++) {
             for (int j = 0; j < board[0].length / 2; j++) {
                 char tmp = board[i][j];
@@ -129,7 +130,7 @@ public class EditChessBoardController {
     }
 
     @FXML
-    void udReverse(MouseEvent event) {
+    void udReverse(ActionEvent event) {
         for (int i = 0; i < board.length / 2; i++) {
             char[] tmp = board[i];
             board[i] = board[board.length - 1 - i];
@@ -140,13 +141,13 @@ public class EditChessBoardController {
 
 
     @FXML
-    void cancelButtonClick(MouseEvent event) {
+    void cancelButtonClick(ActionEvent event) {
         fenCode = null;
         App.closeEditChessBoard();
     }
 
     @FXML
-    void okButtonClick(MouseEvent event) {
+    void okButtonClick(ActionEvent event) {
         if (!XiangqiUtils.validateChessBoard(board) && !DialogUtils.showConfirmDialog("提示", "检测到局面不合法，可能会导致引擎退出或者崩溃，是否继续？")) {
             return;
         }

@@ -180,6 +180,7 @@ public class EngineController implements EngineCallBack {
                         return;
                     }
                 }
+                log.log(System.Logger.Level.WARNING, "未找到名称为 " + name + " 的引擎配置");
             }
         } catch (Exception e) {
             log.log(System.Logger.Level.ERROR, "加载引擎失败", e);

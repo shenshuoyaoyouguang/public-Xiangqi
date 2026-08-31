@@ -38,6 +38,7 @@ public class DialogUtils {
         alert.setHeaderText(content);
         alert.initOwner(App.getMainStage());
         Optional<ButtonType> f = alert.showAndWait();
-        return f.get() == ButtonType.OK;
+        // ESC / 关窗返回 empty，按取消处理，避免 NoSuchElementException
+        return f.orElse(ButtonType.CANCEL) == ButtonType.OK;
     }
 }

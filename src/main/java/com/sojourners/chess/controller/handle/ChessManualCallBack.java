@@ -9,4 +9,9 @@ public interface ChessManualCallBack {
     void turnOnAnalysisMode();
     void turnOffAnalysisMode();
     void refreshLineChart();
+
+    /**
+     * 棋谱侧栏可见性切换后回调，触发棋盘自适应尺寸重算。
+     */
+    default void onNotationPaneVisibilityChanged(boolean visible) {}
 }

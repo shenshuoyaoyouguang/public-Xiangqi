@@ -370,10 +370,7 @@ public class ChessBoard {
         board[y2][x2] = board[y1][x1];
         board[y1][x1] = ' ';
         if (XiangqiUtils.isJiang(board, isRed)) {
-            // 不可送将
-            if (stepSound) {
-                sound.check();
-            }
+            // 不可送将：回滚且不响任何音效（无效走子非将军/吃子/绝杀）
             board[y1][x1] = board[y2][x2];
             board[y2][x2] = tmp;
             return null;

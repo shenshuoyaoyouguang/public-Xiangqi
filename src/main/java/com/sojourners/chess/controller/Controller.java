@@ -437,7 +437,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
 
         } else if (event.getButton() == MouseButton.SECONDARY) {
 
-            BoardContextMenu.getInstance().show(this.canvas, Side.RIGHT, event.getX() - this.canvas.widthProperty().doubleValue(), event.getY());
+            BoardContextMenu.getInstance().show(this.canvas, Side.LEFT, event.getX(), event.getY());
         }
 
     }
@@ -492,6 +492,12 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
         engineController.refreshLineChart();
     }
 
+    @Override
+    public void onNotationPaneVisibilityChanged(boolean visible) {
+        // 侧栏 managed 切换不影响 borderPane 整体尺寸，需主动触发重算
+        board.autoFitSize(borderPane.getWidth(), borderPane.getHeight(), splitPane.getDividerPositions()[0]);
+    }
+
     private void doOpenBook() {
         engineController.queryOpenBook();
     }
@@ -505,9 +511,26 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
     @FXML
     public void pasteButtonClick(ActionEvent e) {
         String fenCode = ClipboardUtils.getText();
-        if ((fenCode != null && !fenCode.isEmpty()) && fenCode.split("/").length == 10) {
-            session.newFromOriginFen(fenCode);
+        if (fenCode == null || fenCode.isEmpty()) {
+            DialogUtils.showWarningDialog("提示", "剪切板为空");
+            return;
         }
+        if (fenCode.split("/").length != 10) {
+            DialogUtils.showWarningDialog("提示", "无效的 FEN 字符串（需 10 行）");
+            return;
+        }
+        // 预校验：解析出错则不覆盖当前局面
+        try {
+            char[][] test = XiangqiUtils.fenToBoard(fenCode);
+            if (!XiangqiUtils.validateChessBoard(test)) {
+                DialogUtils.showWarningDialog("提示", "FEN 解析后局面不合法");
+                return;
+            }
+        } catch (Exception ex) {
+            DialogUtils.showWarningDialog("提示", "FEN 解析失败：" + ex.getMessage());
+            return;
+        }
+        session.newFromOriginFen(fenCode);
     }
 
     @FXML
@@ -868,18 +891,26 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
         threadComboBox.getSelectionModel().selectedItemProperty().addListener(new ChangeListener<String>() {
             @Override
             public void changed(ObservableValue<? extends String> observableValue, String s, String t1) {
-                int num = Integer.parseInt(t1);
-                if (num != prop.getThreadNum()) {
-                    prop.setThreadNum(num);
+                try {
+                    int num = Integer.parseInt(t1);
+                    if (num != prop.getThreadNum()) {
+                        prop.setThreadNum(num);
+                    }
+                } catch (NumberFormatException e) {
+                    log.log(System.Logger.Level.WARNING, "线程数输入非法: " + t1, e);
                 }
             }
         });
         hashComboBox.getSelectionModel().selectedItemProperty().addListener(new ChangeListener<String>() {
             @Override
             public void changed(ObservableValue<? extends String> observableValue, String s, String t1) {
-                int size = Integer.parseInt(t1);
-                if (size != prop.getHashSize()) {
-                    prop.setHashSize(size);
+                try {
+                    int size = Integer.parseInt(t1);
+                    if (size != prop.getHashSize()) {
+                        prop.setHashSize(size);
+                    }
+                } catch (NumberFormatException e) {
+                    log.log(System.Logger.Level.WARNING, "哈希大小输入非法: " + t1, e);
                 }
             }
         });
@@ -887,6 +918,18 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
             @Override
             public void changed(ObservableValue<? extends String> observableValue, String s, String t1) {
                 if ((t1 != null && !t1.isEmpty()) && !t1.equals(prop.getEngineName())) {
+                    // 选中的值必须命中已配置引擎名（ComboBox 可编辑会被任意输入触发）
+                    boolean matched = false;
+                    for (EngineConfig ec : prop.getEngineConfigList()) {
+                        if (t1.equals(ec.getName())) {
+                            matched = true;
+                            break;
+                        }
+                    }
+                    if (!matched) {
+                        log.log(System.Logger.Level.WARNING, "未找到引擎配置: " + t1);
+                        return;
+                    }
                     // 保存引擎设置
                     prop.setEngineName(t1);
                     // 重置三个按钮

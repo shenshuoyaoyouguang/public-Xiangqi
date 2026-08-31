@@ -215,6 +215,10 @@ public class GameSession {
      */
     public void setLinkMode(String t1) {
         if (linkMode.getValue()) {
+            // 只接受两个枚举值；可编辑 ComboBox 可能传任意字符串
+            if (!"自动走棋".equals(t1) && !"观战模式".equals(t1)) {
+                return;
+            }
             if ("自动走棋".equals(t1)) {
                 // 观战模式切换自动走棋，先停止引擎
                 host.getEngineController().stop();

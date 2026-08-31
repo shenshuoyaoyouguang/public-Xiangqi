@@ -18,22 +18,22 @@
     <bottom>
         <HBox alignment="TOP_RIGHT" prefHeight="68.0" BorderPane.alignment="CENTER">
             <children>
-                <Button contentDisplay="RIGHT" mnemonicParsing="false" onMouseClicked="#initChessBoard" prefHeight="27.0" prefWidth="80.0" text="初始局面">
+                <Button contentDisplay="RIGHT" mnemonicParsing="false" onAction="#initChessBoard" prefHeight="27.0" prefWidth="80.0" text="初始局面">
                     <HBox.margin>
                         <Insets right="15.0" />
                     </HBox.margin>
                 </Button>
-                <Button contentDisplay="RIGHT" mnemonicParsing="false" onMouseClicked="#cleanChessBoard" prefHeight="27.0" prefWidth="80.0" text="清空局面">
+                <Button contentDisplay="RIGHT" mnemonicParsing="false" onAction="#cleanChessBoard" prefHeight="27.0" prefWidth="80.0" text="清空局面">
                     <HBox.margin>
                         <Insets right="15.0" />
                     </HBox.margin>
                 </Button>
-                <Button contentDisplay="RIGHT" mnemonicParsing="false" onMouseClicked="#udReverse" prefHeight="27.0" prefWidth="80.0" text="上下翻转">
+                <Button contentDisplay="RIGHT" mnemonicParsing="false" onAction="#udReverse" prefHeight="27.0" prefWidth="80.0" text="上下翻转">
                     <HBox.margin>
                         <Insets right="15.0" />
                     </HBox.margin>
                 </Button>
-                <Button contentDisplay="RIGHT" mnemonicParsing="false" onMouseClicked="#lrReverse" prefHeight="27.0" prefWidth="80.0" text="左右翻转">
+                <Button contentDisplay="RIGHT" mnemonicParsing="false" onAction="#lrReverse" prefHeight="27.0" prefWidth="80.0" text="左右翻转">
                     <HBox.margin>
                         <Insets right="15.0" />
                     </HBox.margin>
@@ -48,12 +48,12 @@
                         <Insets right="40.0" top="7.0" />
                     </HBox.margin>
                 </RadioButton>
-                <Button contentDisplay="RIGHT" mnemonicParsing="false" onMouseClicked="#okButtonClick" prefHeight="27.0" prefWidth="72.0" text="确定">
+                <Button contentDisplay="RIGHT" mnemonicParsing="false" onAction="#okButtonClick" prefHeight="27.0" prefWidth="72.0" text="确定">
                     <HBox.margin>
                         <Insets right="20.0" />
                     </HBox.margin>
                 </Button>
-                <Button contentDisplay="RIGHT" mnemonicParsing="false" onMouseClicked="#cancelButtonClick" prefHeight="27.0" prefWidth="72.0" text="取消">
+                <Button contentDisplay="RIGHT" mnemonicParsing="false" onAction="#cancelButtonClick" prefHeight="27.0" prefWidth="72.0" text="取消">
                     <HBox.margin>
                         <Insets right="30.0" />
                     </HBox.margin>

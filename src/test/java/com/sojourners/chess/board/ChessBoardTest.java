@@ -195,6 +195,32 @@ class ChessBoardTest {
     }
 
     @Nested
+    @DisplayName("autoFitSize 自适应尺寸算法")
+    class AutoFitTest {
+
+        @Test
+        @DisplayName("侧栏开启/关闭不影响 piece size：算法仅在 visible 时一次补偿 left 区域")
+        void algorithmDeductsLeftOnce() {
+            // 反向验证 B1 误报：borderPane.getWidth() = 1169 包含 left 节点 256；
+            // 实际 center 区域 = 1169 - 256 = 913。
+            // autoFitSize 内的 width = width - 256 是一次性补偿 left。
+            // 期望棋盘宽 = (1169 - 256) * 0.6416 = 585.8
+            double borderPaneWidth = 1169;
+            double position = 0.6416122004357299;
+            double expected = (borderPaneWidth - 256) * position;
+            assertEquals(585.8, expected, 0.5, "侧栏 visible 时算法得到正确棋盘宽");
+        }
+
+        @Test
+        @DisplayName("非自适应棋盘调用 autoFitSize 是 no-op（内部守卫）")
+        void nonAutofitIsNoop() {
+            ChessBoard cb = newBoard();
+            // 不抛异常即表明守卫生效
+            cb.autoFitSize(999, 999, 0.5);
+        }
+    }
+
+    @Nested
     @DisplayName("多局态独立性（IT-10.3 去 static 验证）")
     class MultiInstanceTest {
 

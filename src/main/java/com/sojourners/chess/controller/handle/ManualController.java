@@ -475,6 +475,9 @@ public class ManualController {
     }
 
     public void scoreButtonClick(ActionEvent actionEvent) {
+        if (!DialogUtils.showConfirmDialog("棋谱打分", "打分会启动分析模式，是否继续？")) {
+            return;
+        }
         TextInputDialog d = new TextInputDialog("300");
         d.setTitle("棋谱打分");
         d.setHeaderText("请设置每步打分时间(毫秒)，建议不低于300");
@@ -482,8 +485,17 @@ public class ManualController {
         d.initOwner(App.getMainStage());
         d.showAndWait().ifPresent(s -> {
             if (s.trim().isEmpty()) return;
-            long delay = Long.parseLong(s.trim());
-            if (delay <= 0) return;
+            long delay;
+            try {
+                delay = Long.parseLong(s.trim());
+            } catch (NumberFormatException ex) {
+                DialogUtils.showErrorDialog("失败", "打分时间必须是正整数");
+                return;
+            }
+            if (delay <= 0) {
+                DialogUtils.showErrorDialog("失败", "打分时间必须大于0");
+                return;
+            }
 
             if (manualPlayTimeline != null && manualPlayTimeline.getStatus() == Animation.Status.RUNNING) {
                 manualPlayTimeline.stop();
@@ -707,6 +719,7 @@ public class ManualController {
     private void showChessManualPane(boolean isShow) {
         chessManualPane.setVisible(isShow);
         chessManualPane.setManaged(isShow);
+        this.cb.onNotationPaneVisibilityChanged(isShow);
     }
 
     private void reLocationTable() {
