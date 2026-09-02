@@ -4,7 +4,7 @@ import com.sojourners.chess.util.ShellUtils;
 import com.sojourners.chess.util.StringUtils;
 
 import java.awt.*;
-import java.awt.image.BufferedImage;
+
 
 /**
  * macos 连线器，基于osascript 实现
@@ -51,23 +51,4 @@ public class MacosGraphLinker extends AbstractGraphLinker {
         return new Rectangle(x, y, w, h);
     }
 
-    /**
-     * 后台模式暂未实现
-     * @param windowPos
-     * @return
-     */
-    @Override
-    public BufferedImage screenshotByBack(Rectangle windowPos) {
-        return null;
-    }
-
-    /**
-     * 后台模式暂未实现
-     * @param p1
-     * @param p2
-     */
-    @Override
-    public void mouseClickByBack(Point p1, Point p2) {
-
-    }
 }

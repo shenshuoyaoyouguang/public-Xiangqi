@@ -15,6 +15,11 @@ public class Properties implements Serializable {
 
     private static final long serialVersionUID = -1410031608529065857L;
 
+    /**
+     * 配置当前版本，用于一次性迁移
+     */
+    public static final int CURRENT_VERSION = 1;
+
     public static final String DEFAULT_FIRST_STEP_COLOR = "#800080";
     public static final String DEFAULT_SECOND_STEP_COLOR = "#008000";
     public static final String DEFAULT_BRANCH_STEP_COLOR = "#FF2F00";
@@ -58,6 +63,8 @@ public class Properties implements Serializable {
     private boolean linkAnimation;
     private boolean linkShowInfo;
     private boolean linkBackMode;
+    private float linkConfidence = 0.5f;
+    private int version = 1;
 
     private List<String> openBookList;
 
@@ -167,22 +174,43 @@ public class Properties implements Serializable {
                         e.printStackTrace();
                     }
                 }
-            } else {
-                try {
-                    List<EngineConfig> engineConfigList = new ArrayList<>();
-                    prop = new Properties(ChessBoard.BoardSize.AUTOFIT_BOARD, true,
-                            1, 16, "",
-                            Engine.AnalysisModel.FIXED_TIME, 5000, true,
-                            920, 737, 0.64, 0.6,
-                            100, 2, true, true, false,
-                            true, true, false, 2000, 9999,
-                            MoveRule.BEST_SCORE, true, new ArrayList<>());
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
             }
+            if (prop == null) {
+                prop = createDefaultInstance();
+            }
+            prop.migrateIfNeeded();
         }
         return prop;
+    }
+
+    private static Properties createDefaultInstance() {
+        return new Properties(ChessBoard.BoardSize.AUTOFIT_BOARD, true,
+                1, 16, "",
+                Engine.AnalysisModel.FIXED_TIME, 5000, true,
+                920, 737, 0.64, 0.6,
+                100, 2, true, true, false,
+                true, true, false, 2000, 9999,
+                MoveRule.BEST_SCORE, true, new ArrayList<>());
+    }
+
+    private void migrateIfNeeded() {
+        if (version >= CURRENT_VERSION) {
+            return;
+        }
+        try {
+            migrate();
+        } catch (Exception e) {
+            System.out.println("配置迁移失败，使用默认值: " + e.getMessage());
+        }
+    }
+
+    private void migrate() {
+        if (version < 1) {
+            if (linkConfidence <= 0f || linkConfidence > 1f) {
+                linkConfidence = 0.5f;
+            }
+        }
+        version = CURRENT_VERSION;
     }
 
     public void save() {
@@ -362,6 +390,14 @@ public class Properties implements Serializable {
 
     public void setLinkBackMode(boolean linkBackMode) {
         this.linkBackMode = linkBackMode;
+    }
+
+    public float getLinkConfidence() {
+        return linkConfidence <= 0f || linkConfidence > 1f ? 0.5f : linkConfidence;
+    }
+
+    public void setLinkConfidence(float linkConfidence) {
+        this.linkConfidence = linkConfidence;
     }
 
     public double getSplitPos2() {

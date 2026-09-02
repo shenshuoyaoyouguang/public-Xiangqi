@@ -13,6 +13,7 @@ import java.io.*;
 import java.security.SecureRandom;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 引擎封装
@@ -33,10 +34,22 @@ public class Engine {
     private int hashSize;
 
     /**
-     * 停止标志位
+     * 停止标志位（用于消费旧局面残留的 bestmove）
      */
-    private volatile boolean stopFlag;
+    private final AtomicBoolean stopFlag = new AtomicBoolean(false);
     private volatile long time;
+
+    /**
+     * 分析轮次世代号，用于区分 bestmove 所属分析轮次
+     */
+    private final AtomicLong generation = new AtomicLong(0);
+    private volatile long currentGeneration;
+    /**
+     * stop 屏障：等待旧 bestmove 被消费
+     */
+    private final Object stopLock = new Object();
+    private volatile boolean stopConsumed = true;
+    private static final long STOP_CONSUME_TIMEOUT = 1000L;
 
     private BufferedReader reader;
 
@@ -198,8 +211,12 @@ public class Engine {
         return true;
     }
     private void bestMove(String msg) {
-        if (stopFlag) {
-            stopFlag = false;
+        boolean stale = stopFlag.getAndSet(false);
+        synchronized (stopLock) {
+            stopConsumed = true;
+            stopLock.notifyAll();
+        }
+        if (stale) {
             return;
         }
 
@@ -272,11 +289,11 @@ public class Engine {
         }
 
         if (td.getDepth() != null && td.getDepth() < 5) {
-            stopFlag = false;
+            stopFlag.set(false);
         }
         if (td.getTime() != null) {
             if (td.getTime() < this.time || td.getTime() > 0 && td.getTime() < 70) {
-                stopFlag = false;
+                stopFlag.set(false);
             }
             this.time = td.getTime();
         }
@@ -309,6 +326,7 @@ public class Engine {
 
     public void analysis(String fenCode, List<String> moves, List<String> tacticList) {
         stop();
+        awaitStopConsumed();
 
         if (threadNumChange) {
             cmd(("uci".equals(this.protocol) ? "setoption name Threads value " : "setoption Threads ") + threadNum);
@@ -318,6 +336,8 @@ public class Engine {
             cmd(("uci".equals(this.protocol) ? "setoption name Hash value " : "setoption Hash ") + hashSize);
             this.hashSizeChange = false;
         }
+
+        currentGeneration = generation.incrementAndGet();
 
         StringBuilder sb = new StringBuilder();
         sb.append("position fen ").append(fenCode);
@@ -353,8 +373,29 @@ public class Engine {
     }
 
     public void stop() {
-        stopFlag = true;
+        synchronized (stopLock) {
+            stopConsumed = false;
+        }
+        stopFlag.set(true);
         cmd("stop");
+    }
+
+    private void awaitStopConsumed() {
+        synchronized (stopLock) {
+            long deadline = System.currentTimeMillis() + STOP_CONSUME_TIMEOUT;
+            while (!stopConsumed) {
+                long remaining = deadline - System.currentTimeMillis();
+                if (remaining <= 0) {
+                    break;
+                }
+                try {
+                    stopLock.wait(remaining);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
     }
 
     private void cmd(String command) {

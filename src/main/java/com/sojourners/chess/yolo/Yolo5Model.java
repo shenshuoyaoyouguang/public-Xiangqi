@@ -6,6 +6,8 @@ import ai.onnxruntime.OnnxValue;
 import ai.onnxruntime.OrtException;
 import ai.onnxruntime.OrtSession;
 
+import com.sojourners.chess.config.Properties;
+
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.util.List;
@@ -229,7 +231,7 @@ public class Yolo5Model extends OnnxModel {
                 for(int j = 1; j < detections.length; ++j) {
                     DetectResult detection = detections[j];
                     Rectangle location = detection.rect;
-                    if (this.boxIou(detections[0].rect, location) < 0.45d) {
+                    if (this.boxIou(detections[0].rect, location) < NMS_IOU_THRESHOLD) {
                         pq.add(detection);
                     }
                 }
@@ -281,7 +283,7 @@ public class Yolo5Model extends OnnxModel {
             }
 
             float score = maxClass * output[indexBase + 4];
-            if (score > CONFIDENCE) {
+            if (score > Properties.getInstance().getLinkConfidence()) {
                 float xPos = output[indexBase];
                 float yPos = output[indexBase + 1];
                 float w = output[indexBase + 2];

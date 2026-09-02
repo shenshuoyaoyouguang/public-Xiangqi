@@ -53,6 +53,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCallBack {
 
@@ -178,7 +179,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
     /**
      * 正在思考（用于连线判断）
      */
-    private volatile boolean isThinking;
+    private final AtomicBoolean isThinking = new AtomicBoolean(false);
 
     /**
      * 变招列表
@@ -420,9 +421,9 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
         }
 
         if (robotRed.getValue() && redGo || robotBlack.getValue() && !redGo) {
-            this.isThinking = true;
+            this.isThinking.set(true);
         } else {
-            this.isThinking = false;
+            this.isThinking.set(false);
         }
 
         // 重置变招列表
@@ -1149,7 +1150,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
             }
             graphLinker.autoClick(x1, y1, x2, y2);
         }
-        this.isThinking = false;
+        this.isThinking.set(false);
     }
 
     @Override
@@ -1162,11 +1163,11 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
                 board.setTip(second, null, 1);
 
                 goCallBack(first);
-            });
 
-            if (linkMode.getValue()) {
-                trickAutoClick(s);
-            }
+                if (linkMode.getValue()) {
+                    Thread.startVirtualThread(() -> trickAutoClick(s));
+                }
+            });
         }
     }
 
@@ -1291,7 +1292,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
 
     @Override
     public boolean isThinking() {
-        return this.isThinking;
+        return this.isThinking.get();
     }
 
     @Override
@@ -1314,6 +1315,11 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
                 }
             }
         });
+    }
+
+    @Override
+    public void linkerNotify(String message) {
+        Platform.runLater(() -> DialogUtils.showWarningDialog("提示", message));
     }
 
     private void switchPlayer(boolean f) {

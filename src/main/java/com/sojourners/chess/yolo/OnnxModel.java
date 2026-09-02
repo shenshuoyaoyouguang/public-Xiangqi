@@ -11,9 +11,12 @@ public abstract class OnnxModel {
 
     public static final double PADDING = 0.8d;
 
-    public final float CONFIDENCE = 0.75f;
-
     public final int SIZE = 640;
+
+    /**
+     * NMS 非极大值抑制的 IoU 阈值
+     */
+    public static final double NMS_IOU_THRESHOLD = 0.45d;
 
     public static final char[] labels = {'n', 'b', 'a', 'k', 'r', 'c', 'p', 'R', 'N', 'A', 'K', 'B', 'C', 'P', '0'};
 
