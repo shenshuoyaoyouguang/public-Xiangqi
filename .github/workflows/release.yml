@@ -1,79 +1,91 @@
-name: Release Artifacts
+name: Release
 
-# IT-1.2: 三平台 jpackage 产物构建，产物作为 artifact 上传。
-# 说明：javafx:jlink 因依赖含 automatic module（jna/jnativehook）不可用，
-# 改用 jpackage app-image/dmg（与历史 release 的 7z/dmg/tar.gz 形态一致）。
 on:
-  workflow_dispatch:
   push:
-    tags: ['V2*']
+    tags:
+      - 'V*'
+
+permissions:
+  contents: write
 
 jobs:
-  package:
+  build:
+    name: Build (${{ matrix.os }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     strategy:
-      fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            artifact: windows_x64
-          - os: ubuntu-latest
-            artifact: linux_x64
-          - os: macos-latest
-            artifact: macos_arm64
-    runs-on: ${{ matrix.os }}
+          - { os: windows, arch: x64, runner: windows-latest }
+          - { os: linux,   arch: x64, runner: ubuntu-latest }
+          - { os: macos,   arch: x64, runner: macos-13     }
+          - { os: macos,   arch: arm64, runner: macos-14   }
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21
+      - name: Setup JDK 21
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
           java-version: '21'
-          cache: maven
+          distribution: temurin
 
-      - name: Build jar, dependencies and staging directory
+      - name: Inject version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#V}" >> $GITHUB_ENV
+
+      - name: Replace source version
         shell: bash
         run: |
-          VERSION=$(mvn -B help:evaluate -Dexpression=project.version -q -DforceStdout)
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          mvn -B package -DskipTests
-          mvn -B dependency:copy-dependencies -DoutputDirectory=target/deps -DincludeScope=runtime
-          mkdir -p target/staging
-          cp target/deps/* target/staging/
-          cp target/Xiangqi-*.jar target/staging/
-          # 应用按约定从 jar 旁目录读取外部资源（model/sound/ui），一并打入 app 目录
-          cp -r src/main/resources/model src/main/resources/sound src/main/resources/ui src/main/resources/font target/staging/
+          sed -i.bak 's/VERSION = ".*"/VERSION = "${{ env.VERSION }}"/' src/main/java/com/sojourners/chess/App.java
+          rm -f src/main/java/com/sojourners/chess/App.java.bak
 
-      - name: jpackage (windows app-image)
-        if: runner.os == 'Windows'
+      - name: Build jlink image
+        shell: bash
+        run: mvn -B javafx:jlink
+        # JavaFX 23 jmod 由 javafx-maven-plugin 自动从 Maven 中央仓库解析对应平台 classifier。
+        # Fallback: 若某平台（最可能 macOS arm64）插件自动解析失败，
+        # 手动从 Gluon HQ 下载 JavaFX 23 SDK 对应平台包解压取 jmod 目录，
+        # 通过 --module-path 传递；默认不启用，首次运行验证通过后删除此注释。
+
+      - name: Build dmg (macOS only)
+        if: matrix.os == 'macos'
         shell: bash
         run: |
-          jpackage --type app-image --name TCHESS --input target/staging \
-            --main-jar Xiangqi-$VERSION.jar --main-class com.sojourners.chess.Main \
-            --app-version $VERSION --dest target/dist
-          # ZIP 文件名由 bash 变量拼好再传给 powershell，避免 $env: 被 bash 吞掉
-          ZIP="tchess_${VERSION}_windows_x64.zip"
-          powershell -Command "Compress-Archive -Path target/dist/TCHESS -DestinationPath \"$ZIP\""
+          jpackage --type dmg --name TCHESS --app-version ${{ env.VERSION }} \
+            --runtime-image target/Xiangqi --module Xiangqi/com.sojourners.chess.Main
+          mv "TCHESS-${{ env.VERSION }}.dmg" "tchess_V${{ env.VERSION }}_macos_${{ matrix.arch }}.dmg"
 
-      - name: jpackage (linux app-image)
-        if: runner.os == 'Linux'
-        run: |
-          jpackage --type app-image --name TCHESS --input target/staging \
-            --main-jar Xiangqi-$VERSION.jar --main-class com.sojourners.chess.Main \
-            --app-version $VERSION --dest target/dist
-          tar -czf "tchess_${VERSION}_${{ matrix.artifact }}.tar.gz" -C target/dist TCHESS
+      - name: Package (Windows)
+        if: matrix.os == 'windows'
+        shell: bash
+        run: 7z a "tchess_V${{ env.VERSION }}_windows_x64.7z" target/Xiangqi
 
-      - name: jpackage (macos dmg)
-        if: runner.os == 'macOS'
-        run: |
-          jpackage --type dmg --name TCHESS --input target/staging \
-            --main-jar Xiangqi-$VERSION.jar --main-class com.sojourners.chess.Main \
-            --app-version $VERSION --dest target/dist
-          mv target/dist/*.dmg "tchess_${VERSION}_${{ matrix.artifact }}.dmg"
+      - name: Package (Linux)
+        if: matrix.os == 'linux'
+        shell: bash
+        run: tar -czf "tchess_V${{ env.VERSION }}_linux_x64.tar.gz" -C target Xiangqi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tchess_${{ env.VERSION }}_${{ matrix.artifact }}
-          path: tchess_*
+          name: tchess_V${{ env.VERSION }}_${{ matrix.os }}_${{ matrix.arch }}
+          path: tchess_V*
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          files: artifacts/*/*
