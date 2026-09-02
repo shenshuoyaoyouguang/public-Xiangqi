@@ -160,11 +160,19 @@ public class WindowsGraphLinker extends AbstractGraphLinker implements MouseList
             GDI32.INSTANCE.DeleteObject(hBitmap);
 
             if (rect != null) {
-                width = (int) rect.getWidth();
-                height = (int) rect.getHeight();
                 int x = rect.x;
                 int y = rect.y;
-                image = image.getSubimage(x, y, width, height);
+                int w = (int) rect.getWidth();
+                int h = (int) rect.getHeight();
+                if (x < 0) x = 0;
+                if (y < 0) y = 0;
+                if (x + w > image.getWidth()) w = image.getWidth() - x;
+                if (y + h > image.getHeight()) h = image.getHeight() - y;
+                if (w <= 0 || h <= 0) {
+                    System.err.println("[capture] 子图像区域无效: rect=[x=" + rect.x + ",y=" + rect.y + ",w=" + rect.width + ",h=" + rect.height + "], image=" + image.getWidth() + "x" + image.getHeight() + ", needScaling=" + needScaling + ", scale=" + screenScalingFactor);
+                    return null;
+                }
+                image = image.getSubimage(x, y, w, h);
             }
 
             return image;
