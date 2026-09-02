@@ -67,6 +67,8 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
     }
 
     void scan() {
+        this.boardPos = null;
+        this.prevImg = null;
         this.thread = Thread.ofVirtual().unstarted(this);
         this.thread.start();
     }
@@ -690,6 +692,8 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
         if (thread != null && thread.isAlive()) {
             thread.interrupt();
         }
+        this.boardPos = null;
+        this.prevImg = null;
     }
 
     // find chess board from image
