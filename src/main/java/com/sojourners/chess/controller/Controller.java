@@ -495,6 +495,9 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
     @Override
     public void onNotationPaneVisibilityChanged(boolean visible) {
         // 侧栏 managed 切换不影响 borderPane 整体尺寸，需主动触发重算
+        if (board == null) {
+            return;  // 启动时 ManualController 先于棋盘创建，首帧布局监听会完成自适应
+        }
         board.autoFitSize(borderPane.getWidth(), borderPane.getHeight(), splitPane.getDividerPositions()[0]);
     }
 

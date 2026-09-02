@@ -139,7 +139,7 @@ public class ChessBoard {
     public ChessBoard(Canvas canvas, BoardSize bs, BoardStyle style, boolean stepTip, boolean manualTip,
                       boolean showMultiPV, boolean stepSound, boolean showNumber, String fenCode) {
         if (this.boardRender == null) {
-            this.boardRender = style == BoardStyle.CUSTOM ? new CustomBoardRender(canvas) : new DefaultBoardRender(canvas);
+            this.boardRender = new DefaultBoardRender(canvas, BoardPalette.forStyle(style));
         }
 
         this.stepTip = stepTip;
@@ -208,7 +208,7 @@ public class ChessBoard {
     }
 
     public void setBoardStyle(BoardStyle style, Canvas canvas) {
-        this.boardRender = style == BoardStyle.CUSTOM ? new CustomBoardRender(canvas) : new DefaultBoardRender(canvas);
+        this.boardRender = new DefaultBoardRender(canvas, BoardPalette.forStyle(style));
         this.paint();
     }
 
@@ -537,8 +537,9 @@ public class ChessBoard {
                 height = height - 27;
             }
             int pieceSize;
-            if (width / height > 1120 / 1250d) {
-                pieceSize = (int) (height / (10 + 1/3d + 1/12d));
+            // 画布比例:宽 (9+1/3)p,高 (10+1/3+0.4)p(批次 A 新高度公式 2pad+10p+0.4p)
+            if (width / height > 1120 / 1288d) {
+                pieceSize = (int) (height / (10 + 1/3d + 0.4));
             } else {
                 pieceSize = (int) (width / (9 + 1/3d));
             }

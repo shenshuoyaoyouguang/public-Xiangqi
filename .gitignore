@@ -13,3 +13,6 @@ properties
 .idea/
 *.iml
 .vscode/
+
+# Release artifacts (built by CI / jpackage)
+tchess_*.zip

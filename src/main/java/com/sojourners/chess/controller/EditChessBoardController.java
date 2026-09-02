@@ -2,8 +2,8 @@ package com.sojourners.chess.controller;
 
 import com.sojourners.chess.App;
 import com.sojourners.chess.board.BaseBoardRender;
+import com.sojourners.chess.board.BoardPalette;
 import com.sojourners.chess.board.ChessBoard;
-import com.sojourners.chess.board.CustomBoardRender;
 import com.sojourners.chess.board.DefaultBoardRender;
 import com.sojourners.chess.config.Properties;
 import com.sojourners.chess.util.DialogUtils;
@@ -193,8 +193,9 @@ public class EditChessBoardController {
     }
 
     public void initialize() {
-        this.boardRender = Properties.getInstance().getBoardStyle() == ChessBoard.BoardStyle.CUSTOM ? new CustomBoardRender(canvas) : new DefaultBoardRender(canvas);
-        this.demoBoardRender = Properties.getInstance().getBoardStyle() == ChessBoard.BoardStyle.CUSTOM ? new CustomBoardRender(demoCanvas) : new DefaultBoardRender(demoCanvas);
+        ChessBoard.BoardStyle style = Properties.getInstance().getBoardStyle();
+        this.boardRender = new DefaultBoardRender(canvas, BoardPalette.forStyle(style));
+        this.demoBoardRender = new DefaultBoardRender(demoCanvas, BoardPalette.forStyle(style));
         this.boardSize = ChessBoard.BoardSize.MIDDLE_BOARD;
 
         ToggleGroup group = new ToggleGroup();

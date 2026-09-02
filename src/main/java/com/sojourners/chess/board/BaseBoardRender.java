@@ -10,7 +10,12 @@ import javafx.scene.text.Font;
 import javafx.scene.text.TextAlignment;
 import javafx.scene.transform.Rotate;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 
 public abstract class BaseBoardRender implements BoardRender {
@@ -19,12 +24,52 @@ public abstract class BaseBoardRender implements BoardRender {
 
     GraphicsContext gc;
 
+    private final BoardPalette palette;
+
     private int autoPieceSize;
 
-    public BaseBoardRender(Canvas canvas) {
+    // 当前帧几何(paint 赋值,供子类装饰定位用,避免从画布尺寸反推)
+    protected int lastPadding;
+    protected int lastPiece;
+    protected int lastPos;
+
+    public BaseBoardRender(Canvas canvas, BoardPalette palette) {
         this.canvas = canvas;
+        this.palette = palette;
         // canvas 为 null 表示无渲染环境（测试/headless），仅构建骨架不取图形上下文
         this.gc = canvas == null ? null : canvas.getGraphicsContext2D();
+    }
+
+    /**
+     * 棋盘字体:优先打包字体(马善政楷体,OFL),缺失时回退系统楷体。
+     * 2px 桶缓存:连续缩放下避免逐像素重解析 TTF。
+     */
+    private static byte[] fontBytes;
+    private static final Map<Double, Font> FONT_CACHE = new HashMap<>();
+
+    static Font fontAt(double size) {
+        double key = Math.round(size / 2) * 2;
+        return FONT_CACHE.computeIfAbsent(key, s -> {
+            if (fontBytes == null) {
+                fontBytes = loadFontBytes();
+            }
+            if (fontBytes.length > 0) {
+                try {
+                    return Font.loadFont(new ByteArrayInputStream(fontBytes), s);
+                } catch (Exception ignored) {
+                    // 字体解析失败,落到系统字体
+                }
+            }
+            return Font.font("KaiTi", s);
+        });
+    }
+
+    private static byte[] loadFontBytes() {
+        try (InputStream in = BaseBoardRender.class.getResourceAsStream("/font/ma-shan-zheng.ttf")) {
+            return in == null ? new byte[0] : in.readAllBytes();
+        } catch (IOException e) {
+            return new byte[0];
+        }
     }
 
     public void paint(ChessBoard.BoardSize boardSize, char[][] board, ChessBoard.Step prevStep, ChessBoard.Point remark,
@@ -38,9 +83,12 @@ public abstract class BaseBoardRender implements BoardRender {
         int padding = getPadding(boardSize);
         int piece = getPieceSize(boardSize);
         int pos = padding + piece / 2;
+        lastPadding = padding;
+        lastPiece = piece;
+        lastPos = pos;
 
         canvas.setWidth(2 * padding + piece * 9);
-        canvas.setHeight(2 * padding + piece * 10 + piece / 12d);
+        canvas.setHeight(2 * padding + piece * 10 + piece * 0.4);
 
         // 绘制背景图片
         drawBackgroundImage(canvas.getWidth(), canvas.getHeight());
@@ -99,7 +147,7 @@ public abstract class BaseBoardRender implements BoardRender {
         int pos = padding + piece / 2;
 
         canvas.setWidth(2 * padding + piece * 2);
-        canvas.setHeight(2 * padding + piece * 10 + piece / 12d);
+        canvas.setHeight(2 * padding + piece * 10 + piece * 0.4);
 
         // 绘制背景
         gc.setFill(getBackgroundColor());
@@ -115,7 +163,7 @@ public abstract class BaseBoardRender implements BoardRender {
 
     /**
      * 绘制棋子(带选中标记)。
-     * 默认实现忽略 remark 并委托给无 remark 版本,保证 CustomBoardRender 等子类不受影响;
+     * 默认实现忽略 remark 并委托给无 remark 版本;
      * 需要选中外发光的子类(如 DefaultBoardRender)重写本方法。
      */
     public void drawPieces(int pos, int piece, char[][] board, boolean isReverse, ChessBoard.BoardSize style, ChessBoard.Point remark) {
@@ -124,10 +172,10 @@ public abstract class BaseBoardRender implements BoardRender {
 
     @Override
     public void drawCenterText(int pos, int piece, ChessBoard.BoardSize style) {
-        // 绘制楚河汉界(深褐色,与暖木底协调)
+        // 绘制楚河汉界(楷体,palette 色)
         double centerTextSize = getCenterTextSize(style);
-        gc.setFont(Font.font(centerTextSize));
-        gc.setFill(Color.web("#1F4520"));
+        gc.setFont(fontAt(centerTextSize));
+        gc.setFill(palette.riverText);
         gc.setGlobalAlpha(0.55);
         gc.fillText("楚", pos + 2 * piece - centerTextSize, pos + 4.5 * piece + centerTextSize / 3.6);
         gc.fillText("河", pos + 3 * piece - centerTextSize, pos + 4.5 * piece + centerTextSize / 3.6);
@@ -199,7 +247,7 @@ public abstract class BaseBoardRender implements BoardRender {
             double centerX = x1 - (piece / 8.0 + len / 2.0) * Math.cos(rad);
             double centerY = y1 - (piece / 8.0 + len / 2.0) * Math.sin(rad);
             double fontSize = pv < 10 ? piece / 3.6d : piece / 5d;
-            gc.setFont(Font.font(fontSize));
+            gc.setFont(fontAt(fontSize));
             gc.setTextAlign(TextAlignment.CENTER);
             gc.setTextBaseline(VPos.CENTER);
             gc.setFill(numberColor);
@@ -251,8 +299,8 @@ public abstract class BaseBoardRender implements BoardRender {
 
     @Override
     public void drawBoardLine(int pos, int padding, int piece, boolean isReverse, ChessBoard.BoardSize style) {
-        // 棋盘竖线横线(深褐色,网格清晰)
-        gc.setStroke(Color.web("#1F4520"));
+        // 棋盘竖线横线(palette 色,网格清晰)
+        gc.setStroke(palette.grid);
         gc.setLineWidth(getOutRectWidth(style));
         gc.setGlobalAlpha(0.8);
         gc.strokeRect(pos - padding / 2, pos - padding / 2, piece * 8 + padding, piece * 9 + padding);
@@ -285,10 +333,10 @@ public abstract class BaseBoardRender implements BoardRender {
     }
 
     public void drawBoardNum(int pos, int piece, boolean isReverse, ChessBoard.BoardSize style) {
-        // 绘制线路序号(深褐色,与棋盘线一致)
+        // 绘制线路序号(palette 色,与棋盘线一致)
         double numberSize = getNumberSize(style);
-        gc.setFont(Font.font(numberSize));
-        gc.setFill(Color.web("#1F4520"));
+        gc.setFont(fontAt(numberSize));
+        gc.setFill(palette.grid);
         gc.setGlobalAlpha(0.75);
         for (int i = 0; i < 9; i++) {
             // 黑方
@@ -345,7 +393,7 @@ public abstract class BaseBoardRender implements BoardRender {
      * @return
      */
     private double getOutRectWidth(ChessBoard.BoardSize style) {
-        return getPieceSize(style) / 40d;
+        return getPieceSize(style) / 38d;
     }
 
     /**
