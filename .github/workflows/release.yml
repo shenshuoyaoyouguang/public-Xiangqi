@@ -40,31 +40,43 @@ jobs:
           sed -i.bak 's/VERSION = ".*"/VERSION = "${{ env.VERSION }}"/' src/main/java/com/sojourners/chess/App.java
           rm -f src/main/java/com/sojourners/chess/App.java.bak
 
-      - name: Build jlink image
+      - name: Build jar and staging
         shell: bash
-        run: mvn -B javafx:jlink
-        # JavaFX 23 jmod 由 javafx-maven-plugin 自动从 Maven 中央仓库解析对应平台 classifier。
-        # Fallback: 若某平台（最可能 macOS arm64）插件自动解析失败，
-        # 手动从 Gluon HQ 下载 JavaFX 23 SDK 对应平台包解压取 jmod 目录，
-        # 通过 --module-path 传递；默认不启用，首次运行验证通过后删除此注释。
+        run: |
+          mvn -B package -DskipTests
+          mvn -B dependency:copy-dependencies -DoutputDirectory=target/deps -DincludeScope=runtime
+          mkdir -p target/staging
+          cp target/deps/* target/staging/
+          cp target/Xiangqi-*.jar target/staging/
+          cp -r src/main/resources/model src/main/resources/sound src/main/resources/ui src/main/resources/font target/staging/
+          echo "JAR_NAME=$(ls target/Xiangqi-*.jar | xargs basename)" >> $GITHUB_ENV
 
-      - name: Build dmg (macOS only)
+      - name: Build app-image (Windows/Linux)
+        if: matrix.os != 'macos'
+        shell: bash
+        run: |
+          jpackage --type app-image --name TCHESS --input target/staging \
+            --main-jar ${{ env.JAR_NAME }} --main-class com.sojourners.chess.Main \
+            --app-version ${{ env.VERSION }} --dest target/dist
+
+      - name: Build dmg (macOS)
         if: matrix.os == 'macos'
         shell: bash
         run: |
-          jpackage --type dmg --name TCHESS --app-version ${{ env.VERSION }} \
-            --runtime-image target/Xiangqi --module Xiangqi/com.sojourners.chess.Main
-          mv "TCHESS-${{ env.VERSION }}.dmg" "tchess_V${{ env.VERSION }}_macos_${{ matrix.arch }}.dmg"
+          jpackage --type dmg --name TCHESS --input target/staging \
+            --main-jar ${{ env.JAR_NAME }} --main-class com.sojourners.chess.Main \
+            --app-version ${{ env.VERSION }} --dest target/dist
+          mv target/dist/*.dmg "tchess_V${{ env.VERSION }}_macos_${{ matrix.arch }}.dmg"
 
       - name: Package (Windows)
         if: matrix.os == 'windows'
         shell: bash
-        run: 7z a "tchess_V${{ env.VERSION }}_windows_x64.7z" target/Xiangqi
+        run: 7z a "tchess_V${{ env.VERSION }}_windows_x64.7z" target/dist/TCHESS
 
       - name: Package (Linux)
         if: matrix.os == 'linux'
         shell: bash
-        run: tar -czf "tchess_V${{ env.VERSION }}_linux_x64.tar.gz" -C target Xiangqi
+        run: tar -czf "tchess_V${{ env.VERSION }}_linux_x64.tar.gz" -C target/dist TCHESS
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
