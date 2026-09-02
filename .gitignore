@@ -1,0 +1,22 @@
+# Maven build output
+target/
+
+# Eclipse IDE
+.classpath
+.project
+.settings/
+
+# Tool snapshots
+.merkle-snapshot.json
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
