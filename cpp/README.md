@@ -23,8 +23,9 @@ ctest --test-dir cpp/build --output-on-failure
 当前 Windows 开发环境没有 CMake 可用的构建程序，因此也可以直接用 GCC 验证：
 
 ```powershell
+New-Item -ItemType Directory -Force cpp/build | Out-Null
 $sources = @(Get-ChildItem cpp/src -Filter '*.cpp' | ForEach-Object FullName) + @(Get-ChildItem cpp/tests -Filter '*.cpp' | ForEach-Object FullName)
-g++ -std=c++20 -Wall -Wextra -Wpedantic -I cpp/include $sources -o cpp/build/xiangqi_core_tests.exe
+g++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -I cpp/include $sources -o cpp/build/xiangqi_core_tests.exe
 ./cpp/build/xiangqi_core_tests.exe
 ```
 

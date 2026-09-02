@@ -3,11 +3,9 @@
 #include "xiangqi/board.hpp"
 #include "xiangqi/model.hpp"
 
-#include <algorithm>
 #include <functional>
-#include <memory>
-#include <random>
-#include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 namespace xiangqi {

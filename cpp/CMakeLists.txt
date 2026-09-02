@@ -16,12 +16,14 @@ add_library(xiangqi_core
 target_include_directories(xiangqi_core PUBLIC include)
 
 if (MSVC)
-    target_compile_options(xiangqi_core PRIVATE /W4 /permissive-)
+    set(xiangqi_warning_options /W4 /WX /utf-8 /permissive-)
 else()
-    target_compile_options(xiangqi_core PRIVATE -Wall -Wextra -Wpedantic)
+    set(xiangqi_warning_options -Wall -Wextra -Wpedantic -Werror)
 endif()
+target_compile_options(xiangqi_core PRIVATE ${xiangqi_warning_options})
 
 enable_testing()
 add_executable(xiangqi_core_tests tests/core_tests.cpp)
 target_link_libraries(xiangqi_core_tests PRIVATE xiangqi_core)
+target_compile_options(xiangqi_core_tests PRIVATE ${xiangqi_warning_options})
 add_test(NAME xiangqi_core_tests COMMAND xiangqi_core_tests)

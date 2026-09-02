@@ -20,7 +20,7 @@ bool is_red(char piece) {
 }
 
 bool is_piece(char piece) {
-    return std::string_view("k r n b a c p K R N B A C P").find(piece) != std::string_view::npos;
+    return std::string_view("krnbacpKRNBACP").find(piece) != std::string_view::npos;
 }
 
 bool line_clear(const Board& board, int x1, int y1, int x2, int y2) {
@@ -350,6 +350,8 @@ bool BoardRules::is_reverse(std::string_view fen) {
 
 void BoardRules::from_fen(Board& board, std::string_view fen) {
     for (auto& row : board) row.fill(' ');
+    Board parsed{};
+    for (auto& row : parsed) row.fill(' ');
     try {
         const std::size_t space = fen.find(' ');
         std::string placement(fen.substr(0, space));
@@ -372,14 +374,20 @@ void BoardRules::from_fen(Board& board, std::string_view fen) {
         for (int y = 0; y < BoardRows; ++y) {
             int x = 0;
             for (char piece : rows[y]) {
-                if (piece >= '1' && piece <= '9') x += piece - '0';
-                else if (x < BoardCols) board[y][x++] = piece;
+                if (piece >= '1' && piece <= '9') {
+                    const int empty = piece - '0';
+                    if (x > BoardCols - empty) return;
+                    x += empty;
+                } else if (is_piece(piece)) {
+                    if (x >= BoardCols) return;
+                    parsed[y][x++] = piece;
+                } else {
+                    return;
+                }
             }
-            if (x != BoardCols) {
-                for (auto& row : board) row.fill(' ');
-                return;
-            }
+            if (x != BoardCols) return;
         }
+        board = parsed;
     } catch (...) {
         for (auto& row : board) row.fill(' ');
     }
@@ -455,8 +463,11 @@ std::optional<Step> BoardRules::translate_chinese(const Board& board, std::strin
         {"车", 'r'}, {"马", 'n'}, {"象", 'b'}, {"相", 'B'}, {"士", 'a'}, {"仕", 'A'},
         {"将", 'k'}, {"帅", 'K'}, {"炮", 'c'}, {"卒", 'p'}, {"兵", 'P'}
     };
+    bool prefix_red = false;
+    const int prefix_value = digit_value(first, prefix_red);
+    const bool numeric_prefix = prefix_value != 0;
     const bool qualifier = first == "前" || first == "中" || first == "后";
-    const auto piece_it = piece_map.find(qualifier ? second : first);
+    const auto piece_it = piece_map.find(qualifier || numeric_prefix ? second : first);
     if (piece_it == piece_map.end()) {
         if (output) *output = std::string(move);
         return std::nullopt;
@@ -467,7 +478,39 @@ std::optional<Step> BoardRules::translate_chinese(const Board& board, std::strin
 
     int from_x = -1;
     int from_y = -1;
-    if (!qualifier) {
+    if (numeric_prefix) {
+        if (prefix_red != red || prefix_value > 5 || (piece != 'p' && piece != 'P')) {
+            if (output) *output = std::string(move);
+            return std::nullopt;
+        }
+        std::array<std::vector<int>, BoardCols> pawn_files;
+        for (int x = 0; x < BoardCols; ++x) {
+            for (int y = 0; y < BoardRows; ++y) {
+                if (board[y][x] == piece) pawn_files[x].push_back(y);
+            }
+            if (pawn_files[x].size() == 1) pawn_files[x].clear();
+        }
+        int number = prefix_value;
+        if (red) {
+            for (int x = BoardCols - 1; x >= 0 && from_y < 0; --x) {
+                if (number > static_cast<int>(pawn_files[x].size())) {
+                    number -= static_cast<int>(pawn_files[x].size());
+                } else if (!pawn_files[x].empty()) {
+                    from_x = x;
+                    from_y = pawn_files[x][number - 1];
+                }
+            }
+        } else {
+            for (int x = 0; x < BoardCols && from_y < 0; ++x) {
+                if (number > static_cast<int>(pawn_files[x].size())) {
+                    number -= static_cast<int>(pawn_files[x].size());
+                } else if (!pawn_files[x].empty()) {
+                    from_x = x;
+                    from_y = pawn_files[x][pawn_files[x].size() - number];
+                }
+            }
+        }
+    } else if (!qualifier) {
         bool origin_red = red;
         const int origin_file = digit_value(second, origin_red);
         if (origin_file == 0 || origin_red != red) {
@@ -498,6 +541,11 @@ std::optional<Step> BoardRules::translate_chinese(const Board& board, std::strin
         return std::nullopt;
     }
 
+    if (action != "平" && action != "进" && action != "退") {
+        if (output) *output = std::string(move);
+        return std::nullopt;
+    }
+
     int to_x = from_x;
     int to_y = from_y;
     const int distance = destination_file;
@@ -523,6 +571,10 @@ std::optional<Step> BoardRules::translate_chinese(const Board& board, std::strin
             const int delta = forward ? 1 : -1;
             to_y = red ? from_y - delta : from_y + delta;
         }
+    }
+    if (!in_bounds(to_x, to_y)) {
+        if (output) *output = std::string(move);
+        return std::nullopt;
     }
     const Step result{Point{from_x, from_y}, Point{to_x, to_y}};
     if (output) *output = step_for_engine(from_x, from_y, to_x, to_y);

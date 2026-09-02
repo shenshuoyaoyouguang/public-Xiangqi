@@ -1,5 +1,6 @@
 #include "xiangqi/openbook.hpp"
 
+#include <algorithm>
 #include <iterator>
 #include <random>
 

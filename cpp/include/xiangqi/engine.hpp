@@ -3,6 +3,8 @@
 #include "xiangqi/model.hpp"
 
 #include <atomic>
+#include <cstdint>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -10,6 +12,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace xiangqi {
@@ -84,8 +87,10 @@ private:
     AnalysisModel analysis_model_ = AnalysisModel::Infinite;
     std::int64_t analysis_value_ = 0;
 
+    mutable std::mutex lifecycle_mutex_;
     mutable std::mutex command_mutex_;
-    std::vector<std::string> commands_;
+    mutable std::mutex process_mutex_;
+    std::deque<std::string> commands_;
     std::thread reader_thread_;
 
 #ifdef _WIN32

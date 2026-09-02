@@ -2,11 +2,21 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <fstream>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
+
+#ifdef _WIN32
+#include <windows.h>
+#elif __has_include(<iconv.h>)
+#define XIANGQI_HAS_ICONV 1
+#include <cerrno>
+#include <iconv.h>
+#endif
 
 namespace xiangqi {
 namespace {
@@ -25,13 +35,16 @@ bool is_result(std::string_view token) {
 bool is_iccs(std::string token) {
     if (token.size() == 5 && token[2] == '-') token.erase(2, 1);
     if (token.size() != 4) return false;
-    return token[0] >= 'a' && token[0] <= 'i' && token[2] >= 'a' && token[2] <= 'i' &&
+    const char start_file = static_cast<char>(std::tolower(static_cast<unsigned char>(token[0])));
+    const char end_file = static_cast<char>(std::tolower(static_cast<unsigned char>(token[2])));
+    return start_file >= 'a' && start_file <= 'i' && end_file >= 'a' && end_file <= 'i' &&
            token[1] >= '0' && token[1] <= '9' && token[3] >= '0' && token[3] <= '9';
 }
 
 struct MoveToken {
     std::string value;
     std::string comment;
+    bool is_comment = false;
 };
 
 std::vector<MoveToken> tokenize_moves(std::string_view text) {
@@ -44,7 +57,7 @@ std::vector<MoveToken> tokenize_moves(std::string_view text) {
         if (in_comment) {
             if (c == '}') {
                 in_comment = false;
-                tokens.push_back({{}, trim(comment)});
+                if (variation_depth == 0) tokens.push_back({{}, trim(comment), true});
                 comment.clear();
             } else {
                 comment += c;
@@ -52,17 +65,22 @@ std::vector<MoveToken> tokenize_moves(std::string_view text) {
             continue;
         }
         if (c == '{') {
-            if (!current.empty()) { tokens.push_back({std::move(current), {}}); current.clear(); }
+            if (variation_depth == 0 && !current.empty()) {
+                tokens.push_back({std::move(current), {}});
+                current.clear();
+            }
             in_comment = true;
             continue;
         }
         if (c == '(') {
-            if (!current.empty()) { tokens.push_back({std::move(current), {}}); current.clear(); }
+            if (variation_depth == 0 && !current.empty()) {
+                tokens.push_back({std::move(current), {}});
+                current.clear();
+            }
             ++variation_depth;
             continue;
         }
         if (c == ')' && variation_depth > 0) {
-            if (!current.empty()) { tokens.push_back({std::move(current), {}}); current.clear(); }
             --variation_depth;
             continue;
         }
@@ -75,6 +93,225 @@ std::vector<MoveToken> tokenize_moves(std::string_view text) {
     }
     if (!current.empty()) tokens.push_back({std::move(current), {}});
     return tokens;
+}
+
+std::string strip_move_number(std::string token) {
+    std::size_t digits = 0;
+    while (digits < token.size() && std::isdigit(static_cast<unsigned char>(token[digits]))) ++digits;
+    if (digits == 0 || digits == token.size() || token[digits] != '.') return token;
+    std::size_t prefix_end = digits;
+    while (prefix_end < token.size() && token[prefix_end] == '.') ++prefix_end;
+    token.erase(0, prefix_end);
+    return token;
+}
+
+bool parse_tag_line(std::string_view line, std::string& tag, std::string& value) {
+    if (line.size() < 4 || line.front() != '[') return false;
+    std::size_t pos = 1;
+    const auto is_space = [](char c) { return std::isspace(static_cast<unsigned char>(c)) != 0; };
+    while (pos < line.size() && !is_space(line[pos])) ++pos;
+    if (pos == 1 || pos == line.size()) return false;
+    tag = std::string(line.substr(1, pos - 1));
+    while (pos < line.size() && is_space(line[pos])) ++pos;
+    if (pos == line.size() || line[pos] != '"') return false;
+    ++pos;
+
+    value.clear();
+    bool closed = false;
+    while (pos < line.size()) {
+        const char c = line[pos++];
+        if (c == '\\') {
+            if (pos == line.size()) return false;
+            const char escaped = line[pos++];
+            switch (escaped) {
+            case '"': value += '"'; break;
+            case '\\': value += '\\'; break;
+            case 'n': value += '\n'; break;
+            case 'r': value += '\r'; break;
+            case 't': value += '\t'; break;
+            default:
+                value += '\\';
+                value += escaped;
+                break;
+            }
+        } else if (c == '"') {
+            closed = true;
+            break;
+        } else {
+            value += c;
+        }
+    }
+    if (!closed) return false;
+    while (pos < line.size() && is_space(line[pos])) ++pos;
+    if (pos == line.size() || line[pos++] != ']') return false;
+    while (pos < line.size() && is_space(line[pos])) ++pos;
+    return pos == line.size();
+}
+
+std::string escape_tag_value(std::string_view value) {
+    std::string escaped;
+    escaped.reserve(value.size());
+    for (const char c : value) {
+        switch (c) {
+        case '"': escaped += "\\\""; break;
+        case '\\': escaped += "\\\\"; break;
+        case '\n': escaped += "\\n"; break;
+        case '\r': escaped += "\\r"; break;
+        case '\t': escaped += "\\t"; break;
+        default: escaped += c; break;
+        }
+    }
+    return escaped;
+}
+
+void append_utf8(std::uint32_t codepoint, std::string& output) {
+    if (codepoint <= 0x7f) {
+        output += static_cast<char>(codepoint);
+    } else if (codepoint <= 0x7ff) {
+        output += static_cast<char>(0xc0 | (codepoint >> 6));
+        output += static_cast<char>(0x80 | (codepoint & 0x3f));
+    } else if (codepoint <= 0xffff) {
+        output += static_cast<char>(0xe0 | (codepoint >> 12));
+        output += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3f));
+        output += static_cast<char>(0x80 | (codepoint & 0x3f));
+    } else {
+        output += static_cast<char>(0xf0 | (codepoint >> 18));
+        output += static_cast<char>(0x80 | ((codepoint >> 12) & 0x3f));
+        output += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3f));
+        output += static_cast<char>(0x80 | (codepoint & 0x3f));
+    }
+}
+
+bool decode_utf16(std::string_view bytes, bool little_endian, std::string& output) {
+    if (bytes.size() < 2 || (bytes.size() - 2) % 2 != 0) return false;
+    output.clear();
+    output.reserve((bytes.size() - 2) / 2);
+    auto read_unit = [&](std::size_t offset) {
+        const auto first = static_cast<unsigned char>(bytes[offset]);
+        const auto second = static_cast<unsigned char>(bytes[offset + 1]);
+        return static_cast<std::uint16_t>(little_endian ? first | (second << 8) : (first << 8) | second);
+    };
+    for (std::size_t offset = 2; offset < bytes.size(); offset += 2) {
+        const std::uint16_t unit = read_unit(offset);
+        std::uint32_t codepoint = unit;
+        if (unit >= 0xd800 && unit <= 0xdbff) {
+            if (offset + 3 >= bytes.size()) return false;
+            const std::uint16_t low = read_unit(offset + 2);
+            if (low < 0xdc00 || low > 0xdfff) return false;
+            codepoint = 0x10000 + ((static_cast<std::uint32_t>(unit) - 0xd800) << 10) + low - 0xdc00;
+            offset += 2;
+        } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+            return false;
+        }
+        append_utf8(codepoint, output);
+    }
+    return true;
+}
+
+bool valid_utf8(std::string_view text) {
+    for (std::size_t i = 0; i < text.size();) {
+        const auto lead = static_cast<unsigned char>(text[i]);
+        if (lead <= 0x7f) {
+            ++i;
+            continue;
+        }
+        std::size_t length = 0;
+        if (lead >= 0xc2 && lead <= 0xdf) length = 2;
+        else if (lead >= 0xe0 && lead <= 0xef) length = 3;
+        else if (lead >= 0xf0 && lead <= 0xf4) length = 4;
+        else return false;
+        if (i + length > text.size()) return false;
+        for (std::size_t j = 1; j < length; ++j) {
+            if ((static_cast<unsigned char>(text[i + j]) & 0xc0) != 0x80) return false;
+        }
+        const auto second = static_cast<unsigned char>(text[i + 1]);
+        if ((lead == 0xe0 && second < 0xa0) || (lead == 0xed && second > 0x9f) ||
+            (lead == 0xf0 && second < 0x90) || (lead == 0xf4 && second > 0x8f)) return false;
+        i += length;
+    }
+    return true;
+}
+
+#ifdef _WIN32
+bool decode_windows_code_page(std::string_view bytes, unsigned int code_page, std::string& output) {
+    if (bytes.size() > static_cast<std::size_t>((std::numeric_limits<int>::max)())) return false;
+    const auto size = static_cast<int>(bytes.size());
+    const DWORD flags = code_page == CP_UTF8 ? MB_ERR_INVALID_CHARS : 0;
+    const int wide_size = MultiByteToWideChar(code_page, flags, bytes.data(), size, nullptr, 0);
+    if (wide_size <= 0 && !bytes.empty()) return false;
+    std::wstring wide(static_cast<std::size_t>(wide_size), L'\0');
+    if (wide_size > 0 && MultiByteToWideChar(code_page, flags, bytes.data(), size,
+                                              wide.data(), wide_size) != wide_size) return false;
+    const int utf8_size = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide.data(), wide_size,
+                                              nullptr, 0, nullptr, nullptr);
+    if (utf8_size <= 0 && !wide.empty()) return false;
+    output.assign(static_cast<std::size_t>(utf8_size), '\0');
+    if (utf8_size > 0 && WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide.data(), wide_size,
+                                              output.data(), utf8_size, nullptr, nullptr) != utf8_size) return false;
+    return true;
+}
+#endif
+
+#ifdef XIANGQI_HAS_ICONV
+bool decode_gbk_with_iconv(std::string_view bytes, std::string& output) {
+    iconv_t converter = iconv_open("UTF-8", "GBK");
+    if (converter == reinterpret_cast<iconv_t>(-1)) {
+        converter = iconv_open("UTF-8", "CP936");
+    }
+    if (converter == reinterpret_cast<iconv_t>(-1)) return false;
+
+    std::string input(bytes);
+    char* input_data = input.data();
+    std::size_t input_left = input.size();
+    output.clear();
+    while (input_left > 0) {
+        char converted[4096];
+        char* output_data = converted;
+        std::size_t output_left = sizeof(converted);
+        const auto result = iconv(converter, &input_data, &input_left, &output_data, &output_left);
+        output.append(converted, static_cast<std::size_t>(output_data - converted));
+        if (result == static_cast<std::size_t>(-1) && errno != E2BIG) {
+            iconv_close(converter);
+            output.clear();
+            return false;
+        }
+    }
+    iconv_close(converter);
+    return true;
+}
+#endif
+
+std::optional<std::string> decode_file_text(std::string_view bytes) {
+    if (bytes.size() >= 3 && static_cast<unsigned char>(bytes[0]) == 0xef &&
+        static_cast<unsigned char>(bytes[1]) == 0xbb && static_cast<unsigned char>(bytes[2]) == 0xbf) {
+        bytes.remove_prefix(3);
+        if (!valid_utf8(bytes)) return std::nullopt;
+        return std::string(bytes);
+    }
+    if (bytes.size() >= 2 && static_cast<unsigned char>(bytes[0]) == 0xff &&
+        static_cast<unsigned char>(bytes[1]) == 0xfe) {
+        std::string decoded;
+        if (!decode_utf16(bytes, true, decoded)) return std::nullopt;
+        return decoded;
+    }
+    if (bytes.size() >= 2 && static_cast<unsigned char>(bytes[0]) == 0xfe &&
+        static_cast<unsigned char>(bytes[1]) == 0xff) {
+        std::string decoded;
+        if (!decode_utf16(bytes, false, decoded)) return std::nullopt;
+        return decoded;
+    }
+#ifdef _WIN32
+    std::string decoded;
+    if (decode_windows_code_page(bytes, CP_UTF8, decoded)) return decoded;
+    if (decode_windows_code_page(bytes, 936, decoded)) return decoded;
+#else
+    if (valid_utf8(bytes)) return std::string(bytes);
+#ifdef XIANGQI_HAS_ICONV
+    std::string decoded;
+    if (decode_gbk_with_iconv(bytes, decoded)) return decoded;
+#endif
+#endif
+    return std::nullopt;
 }
 
 void translate_mainline(ChessManual& manual, bool chinese) {
@@ -123,12 +360,9 @@ std::optional<ChessManual> PgnManual::from_text(std::string_view text) {
             continue;
         }
         if (line.front() != '[') break;
-        const auto space = line.find(' ');
-        const auto quote1 = line.find('"');
-        const auto quote2 = line.rfind('"');
-        if (space != std::string::npos && quote1 > space && quote2 > quote1) {
-            const std::string tag = line.substr(1, space - 1);
-            const std::string value = line.substr(quote1 + 1, quote2 - quote1 - 1);
+        std::string tag;
+        std::string value;
+        if (parse_tag_line(line, tag, value)) {
             if (tag == "Event") manual.name = value;
             else if (tag == "Site") manual.city = value;
             else if (tag == "Date") manual.date = value;
@@ -149,19 +383,16 @@ std::optional<ChessManual> PgnManual::from_text(std::string_view text) {
     std::shared_ptr<ManualRecord> last;
     const auto tokens = tokenize_moves(text.substr(move_start));
     for (const auto& token_item : tokens) {
-        if (!token_item.comment.empty()) {
+        if (token_item.is_comment) {
             if (last) last->remark = token_item.comment;
             else manual.head->remark = token_item.comment;
             continue;
         }
         const auto& raw_token = token_item.value;
         if (is_result(raw_token)) break;
-        if (raw_token.size() > 1 && raw_token.back() == '.') continue;
-        if (!raw_token.empty() && std::isdigit(static_cast<unsigned char>(raw_token.front()))) {
-            const auto dot = raw_token.find('.');
-            if (dot != std::string::npos) continue;
-        }
-        std::string token = raw_token;
+        std::string token = strip_move_number(raw_token);
+        if (token.empty()) continue;
+        if (std::isdigit(static_cast<unsigned char>(token.front()))) continue;
         const bool token_iccs = is_iccs(token);
         if (token_iccs || format == "ICCS") {
             for (char& c : token) {
@@ -196,12 +427,9 @@ std::optional<ChessManual> PgnManual::open(const std::filesystem::path& file) {
     if (!input) return std::nullopt;
     std::ostringstream buffer;
     buffer << input.rdbuf();
-    std::string text = buffer.str();
-    if (text.size() >= 3 && static_cast<unsigned char>(text[0]) == 0xEF &&
-        static_cast<unsigned char>(text[1]) == 0xBB && static_cast<unsigned char>(text[2]) == 0xBF) {
-        text.erase(0, 3);
-    }
-    return from_text(text);
+    const auto text = decode_file_text(buffer.str());
+    if (!text) return std::nullopt;
+    return from_text(*text);
 }
 
 bool PgnManual::save(const ChessManual& manual, const std::filesystem::path& file) {
@@ -212,16 +440,29 @@ bool PgnManual::save(const ChessManual& manual, const std::filesystem::path& fil
 }
 
 std::string PgnManual::to_text(const ChessManual& manual, bool include_remarks) {
+    bool iccs = false;
+    auto format_record = manual.head;
+    while (format_record && !format_record->list.empty()) {
+        if (format_record->next >= format_record->list.size()) break;
+        format_record = format_record->list[format_record->next];
+        if (!format_record) break;
+        if (!format_record->move.empty() && format_record->cn_move.empty()) {
+            iccs = true;
+            break;
+        }
+        if (!format_record->cn_move.empty()) break;
+    }
+
     std::ostringstream output;
     output << "[Game \"Chinese Chess\"]\n"
-           << "[Event \"" << manual.name << "\"]\n"
-           << "[Site \"" << manual.city << "\"]\n"
-           << "[Date \"" << manual.date << "\"]\n"
-           << "[Red \"" << manual.red << "\"]\n"
-           << "[Black \"" << manual.black << "\"]\n"
+           << "[Event \"" << escape_tag_value(manual.name) << "\"]\n"
+           << "[Site \"" << escape_tag_value(manual.city) << "\"]\n"
+           << "[Date \"" << escape_tag_value(manual.date) << "\"]\n"
+           << "[Red \"" << escape_tag_value(manual.red) << "\"]\n"
+           << "[Black \"" << escape_tag_value(manual.black) << "\"]\n"
            << "[Result \"*\"]\n"
-           << "[FEN \"" << manual.fen_code << "\"]\n"
-           << "[Format \"Chinese\"]\n\n";
+           << "[FEN \"" << escape_tag_value(manual.fen_code) << "\"]\n"
+           << "[Format \"" << (iccs ? "ICCS" : "Chinese") << "\"]\n\n";
     if (!manual.head) return output.str() + "*";
     if (include_remarks && !manual.head->remark.empty()) output << '{' << manual.head->remark << "}\n";
     auto current = manual.head;
@@ -231,7 +472,7 @@ std::string PgnManual::to_text(const ChessManual& manual, bool include_remarks) 
         if (!current) break;
         if (current->id % 2 == 1) output << (current->id + 1) / 2 << ". ";
         else output << "    ";
-        output << (current->cn_move.empty() ? current->move : current->cn_move) << ' ';
+        output << (iccs ? current->move : (current->cn_move.empty() ? current->move : current->cn_move)) << ' ';
         if (include_remarks && !current->remark.empty()) output << '{' << current->remark << '}';
         output << '\n';
     }

@@ -3,8 +3,12 @@
 #include "xiangqi/manual.hpp"
 #include "xiangqi/openbook.hpp"
 
+#include <algorithm>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <string_view>
 
 using namespace xiangqi;
 
@@ -50,9 +54,24 @@ void board_tests() {
             "translate chinese knight");
     Board same_file{};
     for (auto& row : same_file) row.fill(' ');
-    same_file[0][4] = 'k'; same_file[9][4] = 'K';
+    same_file[0][4] = 'k';
     same_file[8][4] = 'R'; same_file[9][4] = 'R';
     require(BoardRules::translate(same_file, "e0e1") == "后车进一", "same-file notation");
+
+    Board numbered_pawns{};
+    for (auto& row : numbered_pawns) row.fill(' ');
+    numbered_pawns[2][4] = numbered_pawns[4][4] = numbered_pawns[6][4] = numbered_pawns[8][4] = 'P';
+    const std::string numbered_move = BoardRules::translate(numbered_pawns, "e3e4");
+    require(numbered_move == "三兵进一", "numbered pawn notation");
+    require(BoardRules::translate_chinese(numbered_pawns, numbered_move, &normalized) && normalized == "e3e4",
+            "numbered pawn parsing");
+
+    const Board invalid_fen = BoardRules::from_fen("9X/9/9/9/9/9/9/9/9/9");
+    require(invalid_fen[0][0] == ' ' && invalid_fen[9][8] == ' ', "invalid fen symbol");
+    const Board overflowing_fen = BoardRules::from_fen("8r2/9/9/9/9/9/9/9/9/9");
+    require(overflowing_fen[0][0] == ' ' && overflowing_fen[0][8] == ' ', "overflowing fen rank");
+    require(!BoardRules::translate_chinese(BoardRules::initial_board(), "兵一进九", &normalized),
+            "out-of-bounds chinese move");
 
     require(BoardRules::is_reverse("7K1/9/9/9/9/9/9/9/9/1k7 w"), "reverse fen detection");
     const Board reversed = BoardRules::from_fen("7K1/9/9/9/9/9/9/9/9/1k7 w");
@@ -90,6 +109,90 @@ void manual_tests() {
     require(PgnManual::to_text(*manual).find("炮二平五") != std::string::npos, "pgn serialization");
 }
 
+std::string utf16_bytes(std::u16string_view text, bool little_endian) {
+    std::string bytes;
+    bytes.append(little_endian ? "\xff\xfe" : "\xfe\xff", 2);
+    for (const char16_t character : text) {
+        const auto value = static_cast<unsigned int>(character);
+        if (little_endian) {
+            bytes += static_cast<char>(value & 0xff);
+            bytes += static_cast<char>((value >> 8) & 0xff);
+        } else {
+            bytes += static_cast<char>((value >> 8) & 0xff);
+            bytes += static_cast<char>(value & 0xff);
+        }
+    }
+    return bytes;
+}
+
+void write_binary(const std::filesystem::path& file, std::string_view bytes) {
+    std::ofstream output(file, std::ios::binary);
+    require(static_cast<bool>(output), "open encoding fixture");
+    output.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    require(static_cast<bool>(output), "write encoding fixture");
+}
+
+void manual_regression_tests() {
+    const auto variations = PgnManual::from_text(
+        "[Format \"Chinese\"]\n\n"
+        "1. 炮二平五 (1... 马８进７ {变例注释}) 马８进７ {主线注释} *\n");
+    require(variations && variations->head->list.size() == 1, "variation mainline");
+    require(variations->head->list[0]->remark.empty(), "variation remark isolation");
+    require(variations->head->list[0]->list[0]->remark == "主线注释", "mainline remark after variation");
+
+    const auto empty_comment = PgnManual::from_text(
+        "[Format \"Chinese\"]\n\n1. 炮二平五 {先前注释} {} *\n");
+    require(empty_comment && empty_comment->head->list[0]->remark.empty(), "empty comment");
+
+    const auto compact_move_numbers = PgnManual::from_text(
+        "[Format \"Chinese\"]\n\n1.炮二平五 1...马８进７ *\n");
+    require(compact_move_numbers && compact_move_numbers->head->list.size() == 1,
+            "compact move number red move");
+    require(compact_move_numbers->head->list[0]->list.size() == 1,
+            "compact move number black move");
+
+    const auto escaped_tags = PgnManual::from_text(
+        R"([Event "A \"quote\" and \\ path\nnext\rrow\tcolumn"]
+[Format "Chinese"]
+
+1. 炮二平五 *)");
+    require(escaped_tags && escaped_tags->name == "A \"quote\" and \\ path\nnext\rrow\tcolumn", "tag unescape");
+    const auto escaped_round_trip = PgnManual::from_text(PgnManual::to_text(*escaped_tags));
+    require(escaped_round_trip && escaped_round_trip->name == escaped_tags->name, "tag escape round trip");
+
+    const auto iccs = PgnManual::from_text(
+        "[Format \"ICCS\"]\n\n1. a0a1 b9b8 *\n");
+    require(iccs && iccs->head->list.size() == 1 && iccs->head->list[0]->move == "a0a1",
+            "iccs parse");
+    const auto iccs_text = PgnManual::to_text(*iccs);
+    require(iccs_text.find("[Format \"ICCS\"]") != std::string::npos, "iccs format output");
+    const auto iccs_round_trip = PgnManual::from_text(iccs_text);
+    require(iccs_round_trip && iccs_round_trip->head->list[0]->move == "a0a1" &&
+            iccs_round_trip->head->list[0]->list[0]->move == "b9b8", "iccs output round trip");
+
+    const auto uppercase_iccs = PgnManual::from_text("\nA0-A1 *\n");
+    require(uppercase_iccs && uppercase_iccs->head->list[0]->move == "a0a1", "uppercase iccs parse");
+
+    const auto temp = std::filesystem::temp_directory_path();
+    for (const bool little_endian : {true, false}) {
+        const auto file = temp / (little_endian ? "xiangqi_core_manual_utf16le.pgn"
+                                                : "xiangqi_core_manual_utf16be.pgn");
+        write_binary(file, utf16_bytes(std::u16string_view(u"[Event \"测试\"]\n[Format \"Chinese\"]\n\n1. 炮二平五 *\n"), little_endian));
+        const auto decoded = PgnManual::open(file);
+        const auto name = decoded ? decoded->name : std::string{};
+        std::filesystem::remove(file);
+        require(decoded && name == "测试", "utf16 input");
+    }
+
+    const auto gbk_file = temp / "xiangqi_core_manual_gbk.pgn";
+    const std::string gbk_name("\xb2\xe2\xca\xd4", 4);
+    write_binary(gbk_file, "[Event \"" + gbk_name + "\"]\n[Format \"Chinese\"]\n\n1. \xb1\xb2 *\n");
+    const auto gbk = PgnManual::open(gbk_file);
+    const auto gbk_decoded_name = gbk ? gbk->name : std::string{};
+    std::filesystem::remove(gbk_file);
+    require(gbk && gbk_decoded_name == "测试", "gbk input");
+}
+
 void openbook_tests() {
     auto book = FunctionOpenBook(
         [](const Board&, bool) {
@@ -119,6 +222,9 @@ void engine_tests() {
     const auto info = EngineProtocol::parse_info("info depth 12 score cp -34 time 1000 nps 200000 multipv 2 pv h2e2 h7e7");
     require(info.depth == 12 && info.score == -34 && info.time == 1000 && info.nps == 200000 && info.pv == 2 &&
             info.detail.size() == 2, "info parser");
+    const auto malformed_info = EngineProtocol::parse_info(
+        "info depth 999999999999999999999 nps -999999999999999999999 time 1");
+    require(!malformed_info.depth && !malformed_info.nps && malformed_info.time == 1, "oversized info parser");
 
     EngineConfig config;
     config.protocol = "uci";
@@ -146,6 +252,14 @@ void engine_tests() {
     callback_engine.ponderhit();
     callback_engine.consume_line("bestmove h1e2 ponder h9g9");
     require(callbacks == 1 && best == "h1e2" && !callback_engine.is_pondering(), "bestmove callback");
+
+    Engine empty_moves_engine(config);
+    empty_moves_engine.start_ponder("fen", {}, "h9g9");
+    require(empty_moves_engine.sent_commands()[1] == "position fen fen moves h9g9", "empty ponder moves");
+
+    Engine bounded_history_engine(config);
+    for (int i = 0; i < 1100; ++i) bounded_history_engine.stop();
+    require(bounded_history_engine.sent_commands().size() == 1024, "bounded command history");
 }
 
 } // namespace
@@ -154,6 +268,7 @@ int main() {
     try {
         board_tests();
         manual_tests();
+        manual_regression_tests();
         openbook_tests();
         engine_tests();
         std::cout << "xiangqi_core_tests: OK\n";
