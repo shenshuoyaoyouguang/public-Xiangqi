@@ -36,6 +36,7 @@ public abstract class OnnxModel {
             session = env.createSession(path, opt);
 
         } catch (Exception e) {
+            System.err.println("[OnnxModel] ONNX Runtime 初始化失败，连线功能将不可用: " + e.getMessage());
             e.printStackTrace();
         }
     }

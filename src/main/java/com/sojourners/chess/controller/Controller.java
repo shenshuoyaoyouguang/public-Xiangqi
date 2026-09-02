@@ -972,9 +972,9 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
                     new WindowsGraphLinker(this) : (com.sun.jna.Platform.isLinux() ?
                     new LinuxGraphLinker(this) : new MacosGraphLinker(this));
         } catch (Exception e) {
+            System.err.println("[Controller] GraphLinker 初始化失败，连线功能将不可用: " + e.getMessage());
             e.printStackTrace();
         }
-
         linkComboBox.getItems().addAll("自动走棋", "观战模式");
         linkComboBox.setValue("自动走棋");
     }
