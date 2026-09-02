@@ -1,5 +1,6 @@
 # Build output
 target/
+cpp/build/
 
 # WorkBuddy project data (not source)
 .workbuddy/
