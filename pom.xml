@@ -133,6 +133,12 @@
                         <goals>
                             <goal>prepare-agent</goal>
                         </goals>
+                        <configuration>
+                            <!-- Windows 下项目路径含中文时 JaCoCo agent 无法向 target/ 写 dump
+                                 (非 ASCII destfile 编码问题)，改写系统临时目录，check 阶段读回。
+                                 CI(Linux, ASCII 路径)同样适用 -->
+                            <destFile>${java.io.tmpdir}/jacoco-${project.artifactId}.exec</destFile>
+                        </configuration>
                     </execution>
                     <execution>
                         <id>coverage-check</id>
@@ -141,6 +147,7 @@
                             <goal>check</goal>
                         </goals>
                         <configuration>
+                            <dataFile>${java.io.tmpdir}/jacoco-${project.artifactId}.exec</dataFile>
                             <rules>
                                 <!-- IT-3.3: 分支覆盖率门禁。
                                      规则类（canGo/isJiang/isSha/fenToBoard/validateChessBoard）已全分支深测；
