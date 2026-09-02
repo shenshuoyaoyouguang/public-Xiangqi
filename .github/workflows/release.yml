@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'V*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - { os: windows, arch: x64, runner: windows-latest }
+          - { os: linux,   arch: x64, runner: ubuntu-latest }
+          - { os: macos,   arch: x64, runner: macos-13     }
+          - { os: macos,   arch: arm64, runner: macos-14   }
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+
+      - name: Inject version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#V}" >> $GITHUB_ENV
+
+      - name: Replace source version
+        shell: bash
+        run: |
+          sed -i.bak 's/VERSION = ".*"/VERSION = "${{ env.VERSION }}"/' src/main/java/com/sojourners/chess/App.java
+          rm -f src/main/java/com/sojourners/chess/App.java.bak
+
+      - name: Build jlink image
+        shell: bash
+        run: mvn -B javafx:jlink
+        # JavaFX 23 jmod 由 javafx-maven-plugin 自动从 Maven 中央仓库解析对应平台 classifier。
+        # Fallback: 若某平台（最可能 macOS arm64）插件自动解析失败，
+        # 手动从 Gluon HQ 下载 JavaFX 23 SDK 对应平台包解压取 jmod 目录，
+        # 通过 --module-path 传递；默认不启用，首次运行验证通过后删除此注释。
+
+      - name: Build dmg (macOS only)
+        if: matrix.os == 'macos'
+        shell: bash
+        run: |
+          jpackage --type dmg --name TCHESS --app-version ${{ env.VERSION }} \
+            --runtime-image target/Xiangqi --module Xiangqi/com.sojourners.chess.Main
+          mv "TCHESS-${{ env.VERSION }}.dmg" "tchess_V${{ env.VERSION }}_macos_${{ matrix.arch }}.dmg"
+
+      - name: Package (Windows)
+        if: matrix.os == 'windows'
+        shell: bash
+        run: 7z a "tchess_V${{ env.VERSION }}_windows_x64.7z" target/Xiangqi
+
+      - name: Package (Linux)
+        if: matrix.os == 'linux'
+        shell: bash
+        run: tar -czf "tchess_V${{ env.VERSION }}_linux_x64.tar.gz" -C target Xiangqi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tchess_V${{ env.VERSION }}_${{ matrix.os }}_${{ matrix.arch }}
+          path: tchess_V*
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          files: artifacts/*/*
