@@ -17,26 +17,37 @@ public class MouseExecutor implements IMoveExecutor {
         Point p1 = getPosition(action.x1, action.y1, ctx.boardPos);
         Point p2 = getPosition(action.x2, action.y2, ctx.boardPos);
 
-        ExecuteResult r = tryClickAndVerify(p1, p2, ctx);
+        ExecuteResult r = tryClickAndVerify(action, p1, p2, ctx);
         if (r != ExecuteResult.FAILED) {
             return r;
         }
 
-        r = tryClickAndVerify(p1, p2, ctx);
+        if (Thread.currentThread().isInterrupted()) {
+            return ExecuteResult.FAILED;
+        }
+
+        r = tryClickAndVerify(action, p1, p2, ctx);
         if (r != ExecuteResult.FAILED) {
             return r;
+        }
+
+        if (Thread.currentThread().isInterrupted()) {
+            return ExecuteResult.FAILED;
         }
 
         if (ctx.degradeClick != null) {
-            ctx.degradeClick.accept(p1, p2);
+            ctx.degradeClick.accept(new Point(p1), new Point(p2));
             return ExecuteResult.RETRY_FAILED_PROMOTED;
         }
         return ExecuteResult.FAILED;
     }
 
-    private ExecuteResult tryClickAndVerify(Point p1, Point p2, ExecContext ctx) {
-        ctx.primaryClick.accept(p1, p2);
+    private ExecuteResult tryClickAndVerify(Action action, Point p1, Point p2, ExecContext ctx) {
+        ctx.primaryClick.accept(new Point(p1), new Point(p2));
         sleep(ctx.verifyWaitMs > 0 ? ctx.verifyWaitMs : VERIFY_WAIT_MS);
+        if (Thread.currentThread().isInterrupted()) {
+            return ExecuteResult.FAILED;
+        }
         BufferedImage img = ctx.screenshot.get();
         if (img == null) {
             return ExecuteResult.SCREENSHOT_INVALID;
@@ -45,21 +56,19 @@ public class MouseExecutor implements IMoveExecutor {
         if (!ctx.recognizer.findChessBoard(img, after)) {
             return ExecuteResult.SCREENSHOT_INVALID;
         }
-        return boardChanged(ctx.beforeBoard, after) ? ExecuteResult.SUCCESS : ExecuteResult.FAILED;
+        return moveApplied(ctx.beforeBoard, after, action) ? ExecuteResult.SUCCESS : ExecuteResult.FAILED;
     }
 
-    private static boolean boardChanged(char[][] before, char[][] after) {
+    /**
+     * 校验走棋是否真正生效：起点原应有棋子且点击后变空，终点有棋子落入
+     */
+    private static boolean moveApplied(char[][] before, char[][] after, Action action) {
         if (before == null) {
             return true;
         }
-        for (int i = 0; i < 10; i++) {
-            for (int j = 0; j < 9; j++) {
-                if (before[i][j] != after[i][j]) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        return before[action.y1][action.x1] != ' '
+                && after[action.y1][action.x1] == ' '
+                && after[action.y2][action.x2] != ' ';
     }
 
     /**

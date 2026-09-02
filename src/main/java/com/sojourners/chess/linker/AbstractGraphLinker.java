@@ -48,6 +48,21 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
 
     private Properties prop;
 
+    /**
+     * 上一帧截图是否与当前帧相同（用于区分"截图不变"与"识别失败"）
+     */
+    private boolean frameUnchanged;
+
+    /**
+     * 上次成功识别并翻转后的 isReverse，供截图不变时复用
+     */
+    private boolean lastIsReverse;
+
+    /**
+     * 上次定位棋盘时的目标窗口位置，用于检测窗口几何变化
+     */
+    private Rectangle lastWindowPos;
+
     public AbstractGraphLinker(LinkerCallBack callBack) throws AWTException {
         this.callBack = callBack;
         robot = new Robot();
@@ -112,17 +127,25 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
                 sleep(scanTime);
                 if (!callBack.isThinking() && !pause) {
 
-                    if (!findChessBoard(board2)) {
-                        stableFrames++;
-                        continue;
-                    }
-
                     boolean isReverse;
-                    try {
-                        isReverse = reverse(board2);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                        continue;
+                    boolean frameChanged;
+
+                    if (!findChessBoard(board2)) {
+                        if (!frameUnchanged) {
+                            stableFrames++;
+                            continue;
+                        }
+                        isReverse = lastIsReverse;
+                        frameChanged = false;
+                    } else {
+                        try {
+                            isReverse = reverse(board2);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                            continue;
+                        }
+                        lastIsReverse = isReverse;
+                        frameChanged = true;
                     }
 
                     if (isSame(board2, callBack.getEngineBoard())) {
@@ -132,7 +155,7 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
                     stableFrames = 0;
 
                     Action action = compareBoard(board2, callBack.getEngineBoard(), isReverse, callBack.isWatchMode());
-                    if (prop.isLinkAnimation() && needConfirm(board2, callBack.getEngineBoard(), action)) {
+                    if (frameChanged && prop.isLinkAnimation() && needConfirm(board2, callBack.getEngineBoard(), action)) {
                         boolean f = false;
                         do {
                             char[][] tmp = board1;
@@ -171,7 +194,7 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
                                 action.x2 = 8 - action.x2;
                             }
                             ExecContext ctx = new ExecContext(
-                                    boardPos, board2, 0, recognizer,
+                                    boardPos, toPhysical(board2, isReverse), 0, recognizer,
                                     () -> screenshot(false),
                                     (p1, p2) -> {
                                         if (prop.isLinkBackMode()) {
@@ -193,12 +216,14 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
 
                         } else if (action.flag == 3) {
                             boardPos = null;
+                            prevImg = null;
                             break;
                         }
                         if (action.flag == 4) {
                             count++;
                             if (count > 9) {
                                 boardPos = null;
+                                prevImg = null;
                                 break;
                             }
                         } else {
@@ -543,10 +568,26 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
      */
     boolean findBoardPosition() {
         if (this.boardPos != null) {
+            Rectangle currentPos = getTargetWindowPosition();
+            if (currentPos == null || lastWindowPos == null
+                    || currentPos.x != lastWindowPos.x
+                    || currentPos.y != lastWindowPos.y
+                    || currentPos.width != lastWindowPos.width
+                    || currentPos.height != lastWindowPos.height) {
+                this.boardPos = null;
+                this.prevImg = null;
+                if (currentPos != null) {
+                    lastWindowPos = currentPos;
+                }
+                return false;
+            }
             return true;
         }
         BufferedImage img = screenshot(true);
         this.boardPos = this.recognizer.findBoardPosition(img);
+        if (this.boardPos != null) {
+            lastWindowPos = getTargetWindowPosition();
+        }
         return this.boardPos != null;
     }
 
@@ -576,12 +617,15 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
         // 截图
         BufferedImage img = screenshot(false);
         if (img == null) {
+            frameUnchanged = false;
             return false;
         }
         // 差量识别：棋盘区域与上一帧无变化则跳过重复识别
         if (prevImg != null && imageEqual(prevImg, img)) {
+            frameUnchanged = true;
             return false;
         }
+        frameUnchanged = false;
         prevImg = img;
         // ai识别棋盘棋子
         if (!this.recognizer.findChessBoard(img, board)) {
@@ -638,6 +682,22 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
             }
         }
         return isReverse;
+    }
+
+    /**
+     * 将逻辑方向（已翻转）棋盘转为物理方向副本，供 MouseExecutor 截图验证使用
+     */
+    private static char[][] toPhysical(char[][] logical, boolean isReverse) {
+        if (!isReverse) {
+            return logical;
+        }
+        char[][] physical = new char[10][9];
+        for (int i = 0; i < 10; i++) {
+            for (int j = 0; j < 9; j++) {
+                physical[i][j] = logical[9 - i][8 - j];
+            }
+        }
+        return physical;
     }
 
     /**

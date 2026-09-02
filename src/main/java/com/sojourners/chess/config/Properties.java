@@ -393,7 +393,7 @@ public class Properties implements Serializable {
     }
 
     public float getLinkConfidence() {
-        return linkConfidence <= 0f || linkConfidence > 1f ? 0.5f : linkConfidence;
+        return !(linkConfidence > 0f && linkConfidence <= 1f) ? 0.5f : linkConfidence;
     }
 
     public void setLinkConfidence(float linkConfidence) {

@@ -38,6 +38,8 @@
 
 ## 2. 现状问题分析（根因）
 
+> **说明**：本节描述的是改进前的历史代码状态。部分缺陷已在本次 PR 中修复（`isThinking` 已改为 `AtomicBoolean`、`Engine.stopFlag` 已改为 `AtomicBoolean` + generation 世代号、`OnnxModel`/`Yolo11Model` 已统一命名常量并删除遮蔽的 `CONFIDENCE` 字段）。以下分析保留作为历史背景与根因记录。
+
 ### 2.1 缺陷 1：`Controller.bestMove()` 线程模型错位
 
 位置：`controller/Controller.java:1156-1171`
@@ -153,7 +155,9 @@ Java 字段解析为编译期静态绑定，导致同一次识别流程使用两
 
 ### 3.2 代码重构与可维护性治理（P1）
 
-1. **拆分 `compareBoard()` 为三个纯函数**，各自可独立单测：
+> **说明**：本节第 1、3 项已在本次 PR 中落地。
+
+1. **拆分 `compareBoard()` 为三个纯函数**，各自可独立单测（**已落地**，见 `AbstractGraphLinker.compareBoard` 调用 `diffBoards`/`classifyAction`/`checkMoveLegality`）：
    - `diffBoards()`：产出差异点集
    - `classifyAction()`：分类 flag 1/2/3/4
    - `checkMoveLegality()`：走棋合法性校验（避免与 `Engine.validateMove` 重名）
@@ -162,7 +166,7 @@ Java 字段解析为编译期静态绑定，导致同一次识别流程使用两
 
 2. **魔法数字常量化**：在 `OnnxModel` 或独立常量类集中声明，语义化命名（如 `BOARD_PADDING`、`YOLO_CONFIDENCE_THRESHOLD`）。同时删除 `Yolo11Model` 遮蔽父类的 `CONFIDENCE` 字段（缺陷 7），消除 0.75/0.5 双阈值不一致，并补一条阈值一致性单测。
 
-3. **平台空实现去重**：在 `AbstractGraphLinker` 提供 `screenshotByBack` / `mouseClickByBack` 默认空实现，子类覆盖支持的方法（模板方法模式），消除 `LinuxGraphLinker`、`MacosGraphLinker` 的重复空实现。
+3. **平台空实现去重**（**已落地**，`AbstractGraphLinker` 已提供 `screenshotByBack`/`mouseClickByBack` 默认空实现，子类按需覆盖）：在 `AbstractGraphLinker` 提供 `screenshotByBack` / `mouseClickByBack` 默认空实现，子类覆盖支持的方法（模板方法模式），消除 `LinuxGraphLinker`、`MacosGraphLinker` 的重复空实现。
 
 #### 预期收益
 
@@ -185,6 +189,8 @@ Java 字段解析为编译期静态绑定，导致同一次识别流程使用两
 ## 4. 中期改进（架构层面）
 
 ### 4.1 识别与执行策略解耦（策略模式）
+
+> **说明**：本节描述的 `IRecognizer`/`IMoveExecutor`/`GraphLinker` 三接口已存在，`AbstractGraphLinker implements GraphLinker` 并持有 `IRecognizer`/`IMoveExecutor` 字段，策略解耦已初步落地。以下为后续扩展方向。
 
 #### 现状问题
 
@@ -283,10 +289,12 @@ Java 字段解析为编译期静态绑定，导致同一次识别流程使用两
 | 阶段 | 优先级 | 改进项 | 风险 | 前置依赖 |
 |---|---|---|---|---|
 | 短期 | P0 | 线程安全修复（3.1） | 低 | 无 |
-| 短期 | P1 | 魔法数字治理 + 平台空实现去重（3.2） | 低 | 无 |
+| 短期 | P1 | 纯函数拆分（3.2-1）✅ 已落地 | 低 | 无 |
+| 短期 | P1 | 平台空实现去重（3.2-3）✅ 已落地 | 低 | 无 |
+| 短期 | P1 | 魔法数字治理 + CONFIDENCE 遮蔽修复（3.2-2） | 低 | 无 |
 | 短期 | P1 | 棋盘位置缓存 + 差量识别（3.3） | 中 | 3.2 纯函数拆分 |
 | 中期 | P2 | 走棋执行器降级（4.4） | 低 | 3.1 |
-| 中期 | P2 | 识别/执行策略解耦（4.1） | 中 | 3.2 |
+| 中期 | P2 | 识别/执行策略解耦（4.1）✅ 已初步落地 | 中 | 3.2 |
 | 中期 | P3 | Controller 拆分（4.2） | 高 | 4.1 |
 | 中期 | P3 | 配置持久化迁移（4.3） | 中 | 无 |
 

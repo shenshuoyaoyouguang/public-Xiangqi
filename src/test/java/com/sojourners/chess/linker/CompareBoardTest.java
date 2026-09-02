@@ -88,4 +88,79 @@ class CompareBoardTest {
                 AbstractGraphLinker.classifyAction(empty, link, engine, false, false);
         assertTrue(candidates.isEmpty());
     }
+
+    @Test
+    void classifyAction_opponentMove_returnsFlag1() {
+        char[][] link = initialBoard();
+        char[][] engine = initialBoard();
+        link[2][0] = 'r';
+        engine[0][0] = 'r';
+        AbstractGraphLinker.DiffResult diff = AbstractGraphLinker.diffBoards(link, engine);
+        List<AbstractGraphLinker.Candidate> candidates =
+                AbstractGraphLinker.classifyAction(diff.diffList, link, engine, false, false);
+        assertEquals(1, candidates.size());
+        assertEquals(1, candidates.get(0).flag);
+        assertEquals(0, candidates.get(0).from.x);
+        assertEquals(0, candidates.get(0).from.y);
+        assertEquals(2, candidates.get(0).to.x);
+        assertEquals(0, candidates.get(0).to.y);
+    }
+
+    @Test
+    void classifyAction_engineMove_returnsFlag2() {
+        char[][] link = initialBoard();
+        char[][] engine = initialBoard();
+        link[0][0] = 'R';
+        engine[2][0] = 'R';
+        AbstractGraphLinker.DiffResult diff = AbstractGraphLinker.diffBoards(link, engine);
+        List<AbstractGraphLinker.Candidate> candidates =
+                AbstractGraphLinker.classifyAction(diff.diffList, link, engine, false, false);
+        assertEquals(1, candidates.size());
+        assertEquals(2, candidates.get(0).flag);
+        assertEquals(0, candidates.get(0).from.x);
+        assertEquals(0, candidates.get(0).from.y);
+        assertEquals(2, candidates.get(0).to.x);
+        assertEquals(0, candidates.get(0).to.y);
+    }
+
+    @Test
+    void classifyAction_capture_returnsFlag1() {
+        char[][] link = initialBoard();
+        char[][] engine = initialBoard();
+        link[2][0] = 'r';
+        engine[0][0] = 'r';
+        engine[2][0] = 'R';
+        AbstractGraphLinker.DiffResult diff = AbstractGraphLinker.diffBoards(link, engine);
+        assertEquals(1, diff.diff1);
+        List<AbstractGraphLinker.Candidate> candidates =
+                AbstractGraphLinker.classifyAction(diff.diffList, link, engine, false, false);
+        assertFalse(candidates.isEmpty());
+        assertEquals(1, candidates.get(0).flag);
+    }
+
+    @Test
+    void classifyAction_reverseBoard_flipsFlag() {
+        char[][] link = initialBoard();
+        char[][] engine = initialBoard();
+        link[2][0] = 'R';
+        engine[0][0] = 'R';
+        AbstractGraphLinker.DiffResult diff = AbstractGraphLinker.diffBoards(link, engine);
+        List<AbstractGraphLinker.Candidate> candidates =
+                AbstractGraphLinker.classifyAction(diff.diffList, link, engine, true, false);
+        assertEquals(1, candidates.size());
+        assertEquals(1, candidates.get(0).flag);
+    }
+
+    @Test
+    void classifyAction_watchMode_returnsFlag1ForRed() {
+        char[][] link = initialBoard();
+        char[][] engine = initialBoard();
+        link[2][0] = 'R';
+        engine[0][0] = 'R';
+        AbstractGraphLinker.DiffResult diff = AbstractGraphLinker.diffBoards(link, engine);
+        List<AbstractGraphLinker.Candidate> candidates =
+                AbstractGraphLinker.classifyAction(diff.diffList, link, engine, false, true);
+        assertEquals(1, candidates.size());
+        assertEquals(1, candidates.get(0).flag);
+    }
 }

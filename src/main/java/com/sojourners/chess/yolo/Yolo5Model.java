@@ -270,6 +270,8 @@ public class Yolo5Model extends OnnxModel {
         int stride = 5 + sizeClasses;
         int size = output.length / stride;
 
+        float confidenceThreshold = Properties.getInstance().getLinkConfidence();
+
         for(int i = 0; i < size; ++i) {
             int indexBase = i * stride;
             float maxClass = 0.0F;
@@ -283,7 +285,7 @@ public class Yolo5Model extends OnnxModel {
             }
 
             float score = maxClass * output[indexBase + 4];
-            if (score > Properties.getInstance().getLinkConfidence()) {
+            if (score > confidenceThreshold) {
                 float xPos = output[indexBase];
                 float yPos = output[indexBase + 1];
                 float w = output[indexBase + 2];

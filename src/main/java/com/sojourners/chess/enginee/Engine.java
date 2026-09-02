@@ -40,6 +40,11 @@ public class Engine {
     private volatile long time;
 
     /**
+     * 是否有活跃搜索（用于避免空闲时等待 bestmove 超时）
+     */
+    private volatile boolean searchActive = false;
+
+    /**
      * 分析轮次世代号，用于区分 bestmove 所属分析轮次
      */
     private final AtomicLong generation = new AtomicLong(0);
@@ -211,12 +216,17 @@ public class Engine {
         return true;
     }
     private void bestMove(String msg) {
+        long gen = currentGeneration;
+        searchActive = false;
         boolean stale = stopFlag.getAndSet(false);
         synchronized (stopLock) {
             stopConsumed = true;
             stopLock.notifyAll();
         }
         if (stale) {
+            return;
+        }
+        if (gen != currentGeneration) {
             return;
         }
 
@@ -366,6 +376,7 @@ public class Engine {
         } else {
             cmd("go infinite" + (hasTactics ? sb.toString() : ""));
         }
+        searchActive = true;
     }
 
     public void moveNow() {
@@ -373,11 +384,13 @@ public class Engine {
     }
 
     public void stop() {
-        synchronized (stopLock) {
-            stopConsumed = false;
+        if (searchActive) {
+            synchronized (stopLock) {
+                stopConsumed = false;
+            }
+            stopFlag.set(true);
+            cmd("stop");
         }
-        stopFlag.set(true);
-        cmd("stop");
     }
 
     private void awaitStopConsumed() {

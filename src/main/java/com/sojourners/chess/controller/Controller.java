@@ -182,6 +182,11 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
     private final AtomicBoolean isThinking = new AtomicBoolean(false);
 
     /**
+     * 连线会话令牌：每次开启连线递增，trickAutoClick 执行前校验，避免停止/重启后残留线程误点击
+     */
+    private final java.util.concurrent.atomic.AtomicLong linkSession = new java.util.concurrent.atomic.AtomicLong(0);
+
+    /**
      * 变招列表
      */
     private List<String> tacticList;
@@ -626,6 +631,7 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
 
         linkMode.setValue(!linkMode.getValue());
         if (linkMode.getValue()) {
+            linkSession.incrementAndGet();
             graphLinker.start();
         } else {
             stopGraphLink();
@@ -1138,7 +1144,10 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
      * 连线模式下自动点击走棋
      * @param step
      */
-    private void trickAutoClick(ChessBoard.Step step) {
+    private void trickAutoClick(ChessBoard.Step step, long session) {
+        if (session != linkSession.get()) {
+            return;
+        }
         if (step != null) {
             int x1 = step.getStart().getX(), y1 = step.getStart().getY();
             int x2 = step.getEnd().getX(), y2 = step.getEnd().getY();
@@ -1165,7 +1174,8 @@ public class Controller implements EngineCallBack, LinkerCallBack, ChessManualCa
                 goCallBack(first);
 
                 if (linkMode.getValue()) {
-                    Thread.startVirtualThread(() -> trickAutoClick(s));
+                    long session = linkSession.get();
+                    Thread.startVirtualThread(() -> trickAutoClick(s, session));
                 }
             });
         }
