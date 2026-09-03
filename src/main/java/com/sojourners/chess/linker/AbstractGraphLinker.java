@@ -4,8 +4,6 @@ import com.sojourners.chess.board.ChessBoard;
 import com.sojourners.chess.config.Properties;
 import com.sojourners.chess.util.PathUtils;
 import com.sojourners.chess.util.XiangqiUtils;
-import com.sojourners.chess.yolo.OnnxModel;
-import com.sojourners.chess.yolo.Yolo11Model;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
@@ -38,7 +36,14 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
 
     private char[][] board1 = new char[10][9];
 
-    private OnnxModel aiModel;
+    /**
+     * 上一帧棋盘截图，用于差量识别
+     */
+    private BufferedImage prevImg;
+
+    private IRecognizer recognizer;
+
+    private IMoveExecutor moveExecutor;
 
     private LinkerCallBack callBack;
 
@@ -53,11 +58,27 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
 
     private Properties prop;
 
+    /**
+     * 上一帧截图是否与当前帧相同（用于区分"截图不变"与"识别失败"）
+     */
+    private boolean frameUnchanged;
+
+    /**
+     * 上次成功识别并翻转后的 isReverse，供截图不变时复用
+     */
+    private boolean lastIsReverse;
+
+    /**
+     * 上次定位棋盘时的目标窗口位置，用于检测窗口几何变化
+     */
+    private Rectangle lastWindowPos;
+
     public AbstractGraphLinker(LinkerCallBack callBack) throws AWTException {
         this.callBack = callBack;
         robot = new Robot();
         this.count = 0;
-        this.aiModel = new Yolo11Model();
+        this.recognizer = new YoloRecognizer();
+        this.moveExecutor = new MouseExecutor();
         this.prop = Properties.getInstance();
         this.pause = false;
     }
@@ -71,6 +92,8 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
     }
 
     void scan() {
+        this.boardPos = null;
+        this.prevImg = null;
         this.thread = Thread.ofVirtual().unstarted(this);
         this.thread.start();
     }
@@ -107,28 +130,42 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
                 sleep(1000);
                 continue;
             }
+            int stableFrames = 0;
             while (!Thread.currentThread().isInterrupted()) {
-                sleep(prop.getLinkScanTime());
+                long baseTime = prop.getLinkScanTime();
+                long scanTime = stableFrames > 10 ? Math.min(baseTime * 2, 2000L) : baseTime;
+                sleep(scanTime);
                 if (!callBack.isThinking() && !pause) {
 
-                    if (!findChessBoard(board2)) {
-                        continue;
-                    }
-
                     boolean isReverse;
-                    try {
-                        isReverse = reverse(board2);
-                    } catch (Exception e) {
-                        log.log(System.Logger.Level.WARNING, "识别棋盘翻转状态失败，跳过本次扫描", e);
-                        continue;
+                    boolean frameChanged;
+
+                    if (!findChessBoard(board2)) {
+                        if (!frameUnchanged) {
+                            stableFrames++;
+                            continue;
+                        }
+                        isReverse = lastIsReverse;
+                        frameChanged = false;
+                    } else {
+                        try {
+                            isReverse = reverse(board2);
+                        } catch (Exception e) {
+                            log.log(System.Logger.Level.WARNING, "识别棋盘翻转状态失败，跳过本次扫描", e);
+                            continue;
+                        }
+                        lastIsReverse = isReverse;
+                        frameChanged = true;
                     }
 
                     if (isSame(board2, callBack.getEngineBoard())) {
+                        stableFrames++;
                         continue;
                     }
+                    stableFrames = 0;
 
                     Action action = compareBoard(board2, callBack.getEngineBoard(), isReverse, callBack.isWatchMode());
-                    if (prop.isLinkAnimation() && needConfirm(board2, callBack.getEngineBoard(), action)) {
+                    if (frameChanged && prop.isLinkAnimation() && needConfirm(board2, callBack.getEngineBoard(), action)) {
                         boolean f = false;
                         do {
                             char[][] tmp = board1;
@@ -168,7 +205,26 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
                                 action.x1 = 8 - action.x1;
                                 action.x2 = 8 - action.x2;
                             }
-                            autoClick(action.x1, action.y1, action.x2, action.y2);
+                            ExecContext ctx = new ExecContext(
+                                    boardPos, toPhysical(board2, isReverse), 0, recognizer,
+                                    () -> screenshot(false),
+                                    (p1, p2) -> {
+                                        if (prop.isLinkBackMode()) {
+                                            mouseClickByBack(p1, p2);
+                                        } else {
+                                            mouseClickByFront(getTargetWindowPosition(), p1, p2);
+                                        }
+                                    },
+                                    prop.isLinkBackMode()
+                                            ? (p1, p2) -> mouseClickByFront(getTargetWindowPosition(), p1, p2)
+                                            : null
+                            );
+                            ExecuteResult r = moveExecutor.execute(action, ctx);
+                            if (r == ExecuteResult.SCREENSHOT_INVALID) {
+                                callBack.linkerNotify("画面不可识别");
+                            } else if (r == ExecuteResult.RETRY_FAILED_PROMOTED) {
+                                callBack.linkerNotify("后台走棋失败，已降级为前台走棋");
+                            }
 
                         } else if (action.flag == 3) {
                             // IT-4.3 #64: 将军等动画瞬态遮挡也会造成差异过大，
@@ -176,6 +232,8 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
                             diffErrorCount++;
                             if (diffErrorCount >= 3) {
                                 log.log(System.Logger.Level.INFO, "连线识别连续 " + diffErrorCount + " 次差异过大，判定为新局面，重新初始化棋盘");
+                                boardPos = null;
+                                prevImg = null;
                                 break;
                             }
                             log.log(System.Logger.Level.INFO, "连线识别差异过大（连续 " + diffErrorCount + " 次），等待识别恢复");
@@ -184,6 +242,8 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
                         if (action.flag == 4) {
                             count++;
                             if (count > 9) {
+                                boardPos = null;
+                                prevImg = null;
                                 break;
                             }
                         } else {
@@ -193,35 +253,6 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
 
                 }
             }
-        }
-    }
-
-    class Action {
-        int flag;
-        int x1;
-        int y1;
-        int x2;
-        int y2;
-        public Action(int flag) {
-            this.flag = flag;
-        }
-        public Action(int flag, int x1, int y1, int x2, int y2) {
-            this.flag = flag;
-            this.x1 = x1;
-            this.y1 = y1;
-            this.x2 = x2;
-            this.y2 = y2;
-        }
-
-        @Override
-        public String toString() {
-            return "Action{" +
-                    "flag=" + flag +
-                    ", x1=" + x1 +
-                    ", y1=" + y1 +
-                    ", x2=" + x2 +
-                    ", y2=" + y2 +
-                    '}';
         }
     }
 
@@ -311,54 +342,89 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
     }
 
     /**
-     * 对比棋盘，计算出当前操作
+     * 对比棋盘，计算出当前操作（等价于原 compareBoard，内部拆分为三个纯函数）
      * flag： 1对方已走棋，需要同步到引擎
      *      2引擎已走棋，需要同步到目标平台
      *      3识别到新棋局
      *      4可能识别到新棋局
      * @param linkBoard
      * @param engineBoard
-     * @param robotBlack
+     * @param isReverse
+     * @param watchMode
      * @return
      */
-    private Action compareBoard(char[][] linkBoard, char[][] engineBoard, boolean robotBlack, boolean analysisMode) {
-        int diff1 = 0, diff2 = 0, diff3 = 0;
+    private Action compareBoard(char[][] linkBoard, char[][] engineBoard, boolean isReverse, boolean watchMode) {
+        DiffResult diff = diffBoards(linkBoard, engineBoard);
 
-        List<Point> diffList = new ArrayList<>();
+        if (diff.diff1 > 2 || diff.diff2 >= 2 && diff.diff3 > 2) {
+            return new Action(3);
+        }
+
+        List<Candidate> candidates = classifyAction(diff.diffList, linkBoard, engineBoard, isReverse, watchMode);
+
+        Action action = null;
+        int sum = 0;
+        for (Candidate candidate : candidates) {
+            if (checkMoveLegality(candidate.flag, candidate.from, candidate.to, linkBoard, engineBoard)) {
+                sum++;
+                action = new Action(candidate.flag, candidate.from.y, candidate.from.x, candidate.to.y, candidate.to.x);
+            }
+        }
+
+        if (sum == 1) {
+            return action;
+        }
+
+        if (diff.diff1 + diff.diff2 + diff.diff3 > 2) {
+            return new Action(4);
+        }
+
+        return null;
+    }
+
+    /**
+     * 计算两棋盘差异，产出差异点集与分类计数
+     * 注意：Point.x 表示行 [0,9]，Point.y 表示列 [0,8]
+     */
+    public static DiffResult diffBoards(char[][] linkBoard, char[][] engineBoard) {
+        DiffResult result = new DiffResult();
         for (int i = 0; i < 10; i++) {
             for (int j = 0; j < 9; j++) {
                 if (linkBoard[i][j] != engineBoard[i][j]) {
-                    diffList.add(new Point(i, j));
+                    result.diffList.add(new Point(i, j));
                     if (linkBoard[i][j] != ' ' && engineBoard[i][j] != ' ') {
-                        diff1++;
+                        result.diff1++;
                     } else if (linkBoard[i][j] != ' ' && engineBoard[i][j] == ' ') {
-                        diff2++;
+                        result.diff2++;
                     } else {
-                        diff3++;
+                        result.diff3++;
                     }
                 }
             }
         }
+        return result;
+    }
 
-        if (diff1 > 2 || diff2 >= 2 && diff3 > 2) {
-            return new Action(3);
-        }
-
-        Action action = null;
-        int flag = 0, sum = 0;
-        Point from = null, to = null;
+    /**
+     * 分类走棋方向（flag 1/2）与起止坐标
+     * isReverse 表示棋盘翻转，watchMode 表示观战模式
+     */
+    public static List<Candidate> classifyAction(List<Point> diffList, char[][] linkBoard, char[][] engineBoard, boolean isReverse, boolean watchMode) {
+        List<Candidate> candidates = new ArrayList<>();
         for (int i = 0; i < diffList.size(); i++) {
             for (int j = i + 1; j < diffList.size(); j++) {
                 Point p1 = diffList.get(i), p2 = diffList.get(j);
                 boolean f = false;
+                int flag = 0;
+                Point from = null, to = null;
                 if (linkBoard[p1.x][p1.y] == engineBoard[p2.x][p2.y] && linkBoard[p1.x][p1.y] != ' ') {
                     if (linkBoard[p2.x][p2.y] == ' ' && engineBoard[p1.x][p1.y] == ' ') {
-                        if (analysisMode || robotBlack && XiangqiUtils.isRed(linkBoard[p1.x][p1.y]) || !robotBlack && !XiangqiUtils.isRed(linkBoard[p1.x][p1.y])) {
+                        if (watchMode || isReverse && XiangqiUtils.isRed(linkBoard[p1.x][p1.y]) || !isReverse && !XiangqiUtils.isRed(linkBoard[p1.x][p1.y])) {
                             flag = 1;
                             from = p2;
                             to = p1;
                             f = true;
-                        } else if (robotBlack && !XiangqiUtils.isRed(linkBoard[p1.x][p1.y]) || !robotBlack && XiangqiUtils.isRed(linkBoard[p1.x][p1.y])) {
+                        } else if (isReverse && !XiangqiUtils.isRed(linkBoard[p1.x][p1.y]) || !isReverse && XiangqiUtils.isRed(linkBoard[p1.x][p1.y])) {
                             flag = 2;
                             from = p1;
                             to = p2;
@@ -371,7 +437,7 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
                         to = p1;
                         f = true;
                     }
-                    if (!analysisMode && engineBoard[p1.x][p1.y] == ' ' && linkBoard[p2.x][p2.y] != ' ' && XiangqiUtils.isRed(engineBoard[p2.x][p2.y]) != XiangqiUtils.isRed(linkBoard[p2.x][p2.y])) {
+                    if (!watchMode && engineBoard[p1.x][p1.y] == ' ' && linkBoard[p2.x][p2.y] != ' ' && XiangqiUtils.isRed(engineBoard[p2.x][p2.y]) != XiangqiUtils.isRed(linkBoard[p2.x][p2.y])) {
                         flag = 2;
                         from = p1;
                         to = p2;
@@ -380,12 +446,12 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
                 }
                 if (linkBoard[p2.x][p2.y] == engineBoard[p1.x][p1.y] && linkBoard[p2.x][p2.y] != ' ') {
                     if (linkBoard[p1.x][p1.y] == ' ' && engineBoard[p2.x][p2.y] == ' ') {
-                        if (analysisMode || robotBlack && XiangqiUtils.isRed(linkBoard[p2.x][p2.y]) || !robotBlack && !XiangqiUtils.isRed(linkBoard[p2.x][p2.y])) {
+                        if (watchMode || isReverse && XiangqiUtils.isRed(linkBoard[p2.x][p2.y]) || !isReverse && !XiangqiUtils.isRed(linkBoard[p2.x][p2.y])) {
                             flag = 1;
                             from = p1;
                             to = p2;
                             f = true;
-                        } else if (robotBlack && !XiangqiUtils.isRed(linkBoard[p2.x][p2.y]) || !robotBlack && XiangqiUtils.isRed(linkBoard[p2.x][p2.y])) {
+                        } else if (isReverse && !XiangqiUtils.isRed(linkBoard[p2.x][p2.y]) || !isReverse && XiangqiUtils.isRed(linkBoard[p2.x][p2.y])) {
                             flag = 2;
                             from = p2;
                             to = p1;
@@ -398,33 +464,51 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
                         to = p2;
                         f = true;
                     }
-                    if (!analysisMode && engineBoard[p2.x][p2.y] == ' ' && linkBoard[p1.x][p1.y] != ' ' && XiangqiUtils.isRed(engineBoard[p1.x][p1.y]) != XiangqiUtils.isRed(linkBoard[p1.x][p1.y])) {
+                    if (!watchMode && engineBoard[p2.x][p2.y] == ' ' && linkBoard[p1.x][p1.y] != ' ' && XiangqiUtils.isRed(engineBoard[p1.x][p1.y]) != XiangqiUtils.isRed(linkBoard[p1.x][p1.y])) {
                         flag = 2;
                         from = p2;
                         to = p1;
                         f = true;
                     }
                 }
-                if (f && (flag == 1 && XiangqiUtils.canGo(engineBoard, from.x, from.y, to.x, to.y) || flag == 2 && XiangqiUtils.canGo(linkBoard, from.x, from.y, to.x, to.y))) {
-                    sum++;
-                    action = new Action(flag, from.y, from.x, to.y, to.x);
+                if (f) {
+                    candidates.add(new Candidate(flag, from, to));
                 }
             }
         }
+        return candidates;
+    }
 
-        if (sum == 1) {
-            return action;
+    /**
+     * 走棋合法性校验：flag 1 用 engineBoard 校验，flag 2 用 linkBoard 校验
+     */
+    public static boolean checkMoveLegality(int flag, Point from, Point to, char[][] linkBoard, char[][] engineBoard) {
+        return flag == 1 && XiangqiUtils.canGo(engineBoard, from.x, from.y, to.x, to.y)
+                || flag == 2 && XiangqiUtils.canGo(linkBoard, from.x, from.y, to.x, to.y);
+    }
+
+    /**
+     * 棋盘差异结果
+     */
+    public static class DiffResult {
+        public List<Point> diffList = new ArrayList<>();
+        public int diff1 = 0;
+        public int diff2 = 0;
+        public int diff3 = 0;
+    }
+
+    /**
+     * 走棋候选（flag + 起止坐标）
+     */
+    public static class Candidate {
+        public int flag;
+        public Point from;
+        public Point to;
+        public Candidate(int flag, Point from, Point to) {
+            this.flag = flag;
+            this.from = from;
+            this.to = to;
         }
-
-//        if (diff1 + diff2 + diff3 == 1) {
-//            return new Action(3);
-//        }
-
-        if (diff1 + diff2 + diff3 > 2) {
-            return new Action(4);
-        }
-
-        return null;
     }
 
     void sleep(long time) {
@@ -487,8 +571,27 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
      * @return
      */
     boolean findBoardPosition() {
+        if (this.boardPos != null) {
+            Rectangle currentPos = getTargetWindowPosition();
+            if (currentPos == null || lastWindowPos == null
+                    || currentPos.x != lastWindowPos.x
+                    || currentPos.y != lastWindowPos.y
+                    || currentPos.width != lastWindowPos.width
+                    || currentPos.height != lastWindowPos.height) {
+                this.boardPos = null;
+                this.prevImg = null;
+                if (currentPos != null) {
+                    lastWindowPos = currentPos;
+                }
+                return false;
+            }
+            return true;
+        }
         BufferedImage img = screenshot(true);
-        this.boardPos = this.aiModel.findBoardPosition(img);
+        this.boardPos = this.recognizer.findBoardPosition(img);
+        if (this.boardPos != null) {
+            lastWindowPos = getTargetWindowPosition();
+        }
         return this.boardPos != null;
     }
 
@@ -518,8 +621,19 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
         long start = System.currentTimeMillis();
         // 截图
         BufferedImage img = screenshot(false);
+        if (img == null) {
+            frameUnchanged = false;
+            return false;
+        }
+        // 差量识别：棋盘区域与上一帧无变化则跳过重复识别
+        if (prevImg != null && imageEqual(prevImg, img)) {
+            frameUnchanged = true;
+            return false;
+        }
+        frameUnchanged = false;
+        prevImg = img;
         // ai识别棋盘棋子
-        boolean aiOk = this.aiModel.findChessBoard(img, board);
+        boolean aiOk = this.recognizer.findChessBoard(img, board);
         boolean valid = aiOk && XiangqiUtils.validateChessBoard(board);
         log.log(System.Logger.Level.DEBUG, "连线识别耗时 " + (System.currentTimeMillis() - start) + "ms ai识别=" + (aiOk ? "成功" : "失败") + " 校验=" + (valid ? "通过" : "失败"));
         if (!aiOk) {
@@ -580,6 +694,21 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
             log.log(System.Logger.Level.WARNING, "识别失败样本留存失败", e);
         }
     }
+
+    private boolean imageEqual(BufferedImage a, BufferedImage b) {
+        if (a == null || b == null || a.getWidth() != b.getWidth() || a.getHeight() != b.getHeight()) {
+            return false;
+        }
+        for (int x = 0; x < a.getWidth(); x++) {
+            for (int y = 0; y < a.getHeight(); y++) {
+                if (a.getRGB(x, y) != b.getRGB(x, y)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     private boolean reverse(char[][] board) throws Exception {
         // 是否翻转
         int rowRedKing = -1, rowBlackKing = -1;
@@ -606,6 +735,22 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
             }
         }
         return isReverse;
+    }
+
+    /**
+     * 将逻辑方向（已翻转）棋盘转为物理方向副本，供 MouseExecutor 截图验证使用
+     */
+    private static char[][] toPhysical(char[][] logical, boolean isReverse) {
+        if (!isReverse) {
+            return logical;
+        }
+        char[][] physical = new char[10][9];
+        for (int i = 0; i < 10; i++) {
+            for (int j = 0; j < 9; j++) {
+                physical[i][j] = logical[9 - i][8 - j];
+            }
+        }
+        return physical;
     }
 
     /**
@@ -642,31 +787,14 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
      */
     public void autoClick(int x1, int y1, int x2, int y2) {
 
-        Point p1 = getPosition(x1, y1);
-        Point p2 = getPosition(x2, y2);
+        Point p1 = MouseExecutor.getPosition(x1, y1, boardPos);
+        Point p2 = MouseExecutor.getPosition(x2, y2, boardPos);
         if (prop.isLinkBackMode()) {
             mouseClickByBack(p1, p2);
         } else {
             Rectangle windowPos = getTargetWindowPosition();
             mouseClickByFront(windowPos, p1, p2);
         }
-    }
-    private Point getPosition(int x, int y) {
-        double pieceWith = boardPos.width / (8 + OnnxModel.PADDING * 2);
-        double pieceHeight = boardPos.height / (9 + OnnxModel.PADDING * 2);
-        Point p = new Point((int) (boardPos.x + pieceWith * OnnxModel.PADDING + (x * pieceWith)),
-                (int) (boardPos.y + pieceHeight * OnnxModel.PADDING + (y * pieceHeight)));
-        if (x == 0) {
-            p.x += 0.2 * pieceWith;
-        } else if (x == 8) {
-            p.x -= 0.2 * pieceWith;
-        }
-        if (y == 0) {
-            p.y += 0.2 * pieceHeight;
-        } else if (y == 9) {
-            p.y -= 0.2 * pieceHeight;
-        }
-        return p;
     }
 
     /**
@@ -677,12 +805,14 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
         if (thread != null && thread.isAlive()) {
             thread.interrupt();
         }
+        this.boardPos = null;
+        this.prevImg = null;
     }
 
     // find chess board from image
     public char[][] findChessBoard(BufferedImage img) {
         char[][] tmp = new char[10][9];
-        if (this.aiModel.findChessBoard(img, tmp)) {
+        if (this.recognizer.findChessBoard(img, tmp)) {
             return tmp;
         } else {
             return null;

@@ -1,13 +1,13 @@
 package com.sojourners.chess.yolo;
 
+import com.sojourners.chess.config.Properties;
+
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
 
 public class Yolo11Model extends Yolo5Model {
-
-    float CONFIDENCE = 0.5f;
 
     @Override
     public String getModelPath() {
@@ -62,6 +62,8 @@ public class Yolo11Model extends Yolo5Model {
         int stride = 4 + sizeClasses;
         int size = output.length / stride;
 
+        float confidenceThreshold = Properties.getInstance().getLinkConfidence();
+
         for(int i = 0; i < size; ++i) {
             int indexBase = i * stride;
             float maxClass = 0.0F;
@@ -75,7 +77,7 @@ public class Yolo11Model extends Yolo5Model {
             }
 
             float score = maxClass;
-            if (score > CONFIDENCE) {
+            if (score > confidenceThreshold) {
                 float xPos = output[reshape(indexBase, stride, size)];
                 float yPos = output[reshape(indexBase + 1, stride, size)];
                 float w = output[reshape(indexBase + 2, stride, size)];

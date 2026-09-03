@@ -12,6 +12,7 @@ import java.io.*;
 import java.security.SecureRandom;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 引擎封装
@@ -46,7 +47,25 @@ public class Engine {
     /**
      * 停止标志位
      */
-    private volatile boolean stopFlag;
+    private final AtomicBoolean stopFlag = new AtomicBoolean(false);
+
+    /**
+     * 是否有活跃的 analysis 搜索（仅 analysis 路径置 true，ponder 不走此路径）
+     */
+    private volatile boolean searchActive;
+
+    /**
+     * analysis 世代号：每次发起 analysis 递增，bestmove 据此丢弃过期结果
+     */
+    private final AtomicLong generation = new AtomicLong(0);
+    private volatile long currentGeneration = 0;
+
+    /**
+     * stop 屏障：stop() 等待 bestMove 消费 stop 信号后再发起新 analysis
+     */
+    private final Object stopLock = new Object();
+    private volatile boolean stopConsumed = true;
+    private static final long STOP_CONSUME_TIMEOUT = 1000L;
 
     // IT-11.1: ponder 后台思考状态（ponderhitSent：已通知引擎命中，其后的 bestmove 为本方回合着法）
     private volatile boolean pondering;
@@ -214,8 +233,17 @@ public class Engine {
         return true;
     }
     private void bestMove(String msg) {
-        if (stopFlag) {
-            stopFlag = false;
+        long gen = currentGeneration;
+        searchActive = false;
+        boolean stale = stopFlag.getAndSet(false);
+        synchronized (stopLock) {
+            stopConsumed = true;
+            stopLock.notifyAll();
+        }
+        if (stale) {
+            return;
+        }
+        if (gen != currentGeneration) {
             return;
         }
         if (pondering && !ponderhitSent) {
@@ -296,11 +324,11 @@ public class Engine {
         }
 
         if (td.getDepth() != null && td.getDepth() < 5) {
-            stopFlag = false;
+            stopFlag.set(false);
         }
         if (td.getTime() != null) {
             if (td.getTime() < this.time || td.getTime() > 0 && td.getTime() < 70) {
-                stopFlag = false;
+                stopFlag.set(false);
             }
             this.time = td.getTime();
         }
@@ -333,6 +361,9 @@ public class Engine {
 
     public void analysis(String fenCode, List<String> moves, List<String> tacticList) {
         stop();
+        awaitStopConsumed();
+
+        currentGeneration = generation.incrementAndGet();
 
         if (threadNumChange) {
             cmd(("uci".equals(this.protocol) ? "setoption name Threads value " : "setoption Threads ") + threadNum);
@@ -372,6 +403,7 @@ public class Engine {
         } else {
             cmd("go infinite" + (hasTactics ? sb.toString() : ""));
         }
+        searchActive = true;
     }
 
     public void moveNow() {
@@ -379,10 +411,37 @@ public class Engine {
     }
 
     public void stop() {
-        stopFlag = true;
+        if (searchActive) {
+            synchronized (stopLock) {
+                stopConsumed = false;
+            }
+        }
+        stopFlag.set(true);
+        cmd("stop");
         pondering = false;
         ponderhitSent = false;
-        cmd("stop");
+    }
+
+    /**
+     * 等待 bestMove 消费 stop 信号，避免快速连续 analysis 时旧 bestmove 污染新局面。
+     * 超时 1s 兜底，防止引擎异常无 bestmove 时死等。
+     */
+    private void awaitStopConsumed() {
+        synchronized (stopLock) {
+            long deadline = System.currentTimeMillis() + STOP_CONSUME_TIMEOUT;
+            while (!stopConsumed) {
+                long remaining = deadline - System.currentTimeMillis();
+                if (remaining <= 0) {
+                    break;
+                }
+                try {
+                    stopLock.wait(remaining);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
     }
 
     /**
@@ -408,6 +467,8 @@ public class Engine {
         cmd("go ponder" + ponderLimit());
         pondering = true;
         ponderhitSent = false;
+        // ponder 不走 analysis 路径，显式清除活跃标志，避免 stop() 误触 stop 屏障
+        searchActive = false;
     }
 
     public void ponderhit() {

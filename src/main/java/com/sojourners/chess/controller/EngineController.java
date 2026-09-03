@@ -189,8 +189,12 @@ public class EngineController implements EngineCallBack {
 
     /**
      * 连线模式下自动点击走棋
+     * @param session 连线会话令牌，与 host.getLinkSession() 不匹配时丢弃（连线已重启）
      */
-    public void autoClickTactic(ChessBoard.Step step) {
+    public void autoClickTactic(ChessBoard.Step step, long session) {
+        if (session != host.getLinkSession()) {
+            return;
+        }
         if (step != null) {
             int x1 = step.getStart().getX(), y1 = step.getStart().getY();
             int x2 = step.getEnd().getX(), y2 = step.getEnd().getY();

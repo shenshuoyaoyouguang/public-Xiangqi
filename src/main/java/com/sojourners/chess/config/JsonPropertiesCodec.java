@@ -75,6 +75,8 @@ public final class JsonPropertiesCodec {
             sb.append(((Number) value).longValue());
         } else if (type == double.class || type == Double.class) {
             sb.append(d2s((Double) value));
+        } else if (type == float.class || type == Float.class) {
+            sb.append(d2s(((Number) value).doubleValue()));
         } else if (type.isEnum()) {
             writeString(sb, ((Enum<?>) value).name());
         } else if (List.class.isAssignableFrom(type)) {
@@ -136,6 +138,8 @@ public final class JsonPropertiesCodec {
                 if (v.isNum()) f.setLong(props, (long) v.number);
             } else if (type == double.class) {
                 if (v.isNum()) f.setDouble(props, v.number);
+            } else if (type == float.class) {
+                if (v.isNum()) f.setFloat(props, (float) v.number);
             } else if (type == String.class) {
                 f.set(props, v.isStr() ? v.str : null);
             } else if (type == Boolean.class) {
@@ -144,6 +148,8 @@ public final class JsonPropertiesCodec {
                 f.set(props, v.isNum() ? (int) v.number : null);
             } else if (type == Double.class) {
                 f.set(props, v.isNum() ? v.number : null);
+            } else if (type == Float.class) {
+                f.set(props, v.isNum() ? (float) v.number : null);
             } else if (type.isEnum()) {
                 if (v.isStr()) {
                     try {

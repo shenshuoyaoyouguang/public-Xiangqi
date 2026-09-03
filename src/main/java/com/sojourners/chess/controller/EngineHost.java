@@ -23,6 +23,11 @@ public interface EngineHost {
     void setThinking(boolean thinking);
 
     /**
+     * 连线会话令牌：每次开启连线递增，autoClickTactic 据此丢弃过期代点请求
+     */
+    long getLinkSession();
+
+    /**
      * 引擎 bestmove 的走子应用链（更新棋盘/棋谱/切换行棋方/再驱动），由 Controller 壳实现
      */
     void onEngineBestMove(String first, String second);

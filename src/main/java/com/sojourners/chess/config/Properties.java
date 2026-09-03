@@ -75,6 +75,11 @@ public class Properties {
     private Integer linkMoveTime;
     private Integer offManualSteps;
 
+    /**
+     * 连线识别置信度阈值（0,1]，非法值回退 0.5f
+     */
+    private float linkConfidence = 0.5f;
+
     private MoveRule moveRule;
 
     private Boolean bookSwitch;
@@ -328,6 +333,14 @@ public class Properties {
 
     public void setLinkManualMove(Boolean linkManualMove) {
         this.linkManualMove = linkManualMove;
+    }
+
+    public float getLinkConfidence() {
+        return !(linkConfidence > 0f && linkConfidence <= 1f) ? 0.5f : linkConfidence;
+    }
+
+    public void setLinkConfidence(float linkConfidence) {
+        this.linkConfidence = linkConfidence;
     }
 
     public void setLinkMoveTime(Integer linkMoveTime) {

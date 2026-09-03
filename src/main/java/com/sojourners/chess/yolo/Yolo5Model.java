@@ -5,6 +5,7 @@ import ai.onnxruntime.OnnxTensor;
 import ai.onnxruntime.OnnxValue;
 import ai.onnxruntime.OrtException;
 import ai.onnxruntime.OrtSession;
+import com.sojourners.chess.config.Properties;
 
 import java.awt.*;
 import java.awt.image.BufferedImage;
@@ -276,6 +277,8 @@ public class Yolo5Model extends OnnxModel {
         int stride = 5 + sizeClasses;
         int size = output.length / stride;
 
+        float confidenceThreshold = Properties.getInstance().getLinkConfidence();
+
         for(int i = 0; i < size; ++i) {
             int indexBase = i * stride;
             float maxClass = 0.0F;
@@ -289,7 +292,7 @@ public class Yolo5Model extends OnnxModel {
             }
 
             float score = maxClass * output[indexBase + 4];
-            if (score > CONFIDENCE) {
+            if (score > confidenceThreshold) {
                 float xPos = output[indexBase];
                 float yPos = output[indexBase + 1];
                 float w = output[indexBase + 2];
