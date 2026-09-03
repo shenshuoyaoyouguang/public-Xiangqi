@@ -20,6 +20,12 @@ public class WindowsGraphLinker extends AbstractGraphLinker implements MouseList
     private double screenScalingFactor;
     private boolean needScaling;
 
+    /**
+     * Constructs a Windows graph linker using JNA for window management and background capture.
+     *
+     * @param callBack the callback interface for notifying the controller of linking events
+     * @throws AWTException if Robot creation fails
+     */
     public WindowsGraphLinker(LinkerCallBack callBack) throws AWTException {
         super(callBack);
         this.listener = new GlobalMouseListener(this);
@@ -37,6 +43,9 @@ public class WindowsGraphLinker extends AbstractGraphLinker implements MouseList
             log.log(System.Logger.Level.ERROR, "启动全局鼠标监听失败", e);
         }
     }
+    /**
+     * Handles mouse click event from the global mouse listener to capture the target window handle.
+     */
     @Override
     public void mouseClick() {
         try {
@@ -57,6 +66,12 @@ public class WindowsGraphLinker extends AbstractGraphLinker implements MouseList
 
     }
 
+    /**
+     * Checks if DPI scaling is needed by comparing system DPI with window DPI.
+     *
+     * @param hwnd the window handle
+     * @return true if system and window DPI differ (scaling required), false otherwise
+     */
     private boolean needScaling(WinDef.HWND hwnd) {
         // 获取系统DPI
         int systemDpi = User32Extra.INSTANCE.GetDpiForSystem();
@@ -79,6 +94,11 @@ public class WindowsGraphLinker extends AbstractGraphLinker implements MouseList
         return rectangle;
     }
 
+    /**
+     * Gets the screen scaling factor from the default graphics device.
+     *
+     * @return the scale X factor (e.g., 1.0 for 100%, 1.5 for 150%)
+     */
     private double getScreenScalingFactor() {
         GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
         GraphicsDevice gd = ge.getDefaultScreenDevice();
@@ -107,6 +127,12 @@ public class WindowsGraphLinker extends AbstractGraphLinker implements MouseList
         leftClick(p2.x, p2.y);
     }
 
+    /**
+     * Sends left-click window messages to the target window at the specified coordinates.
+     *
+     * @param x window-relative x coordinate
+     * @param y window-relative y coordinate
+     */
     private void leftClick(int x, int y) {
         User32.INSTANCE.PostMessage(hwnd, 0x0200, new WinDef.WPARAM(1), new WinDef.LPARAM(makeLParam(x, y)));
         User32.INSTANCE.PostMessage(hwnd, 0x0201, new WinDef.WPARAM(1), new WinDef.LPARAM(makeLParam(x, y)));
@@ -115,10 +141,24 @@ public class WindowsGraphLinker extends AbstractGraphLinker implements MouseList
         }
         User32.INSTANCE.PostMessage(hwnd, 0x0202, new WinDef.WPARAM(0), new WinDef.LPARAM(makeLParam(x, y)));
     }
+    /**
+     * Packs two 16-bit values into a 32-bit LPARAM for Windows messages.
+     *
+     * @param loWord the low-order word (x coordinate)
+     * @param hiWord the high-order word (y coordinate)
+     * @return the packed 32-bit value
+     */
     private int makeLParam(int loWord, int hiWord) {
         return (hiWord << 16) | (loWord & 0xFFFF);
     }
 
+    /**
+     * Captures a screenshot of the window in background mode using PrintWindow API.
+     *
+     * @param hWnd the window handle
+     * @param rect the region to extract from the captured client area, or null for the entire client area
+     * @return the captured image, or null if capture fails
+     */
     private BufferedImage capture(WinDef.HWND hWnd, Rectangle rect) {
         // 创建与窗口相关联的设备上下文和一个内存设备上下文以执行离屏渲染
         WinDef.HDC hdcWindow = User32.INSTANCE.GetDC(hWnd);
@@ -181,11 +221,17 @@ public class WindowsGraphLinker extends AbstractGraphLinker implements MouseList
         }
     }
 
+    /**
+     * Changes the system cursor to a custom circle icon during window selection.
+     */
     private void selectCursor() {
         WinDef.HCURSOR h = User32Extra.INSTANCE.LoadCursorFromFileA(PathUtils.getJarPath() + "ui/circle.ico");
         User32Extra.INSTANCE.SetSystemCursor(h, new WinDef.DWORD(32512));
     }
 
+    /**
+     * Restores the system cursor to its default state after window selection.
+     */
     private void restoreCursor() {
         User32Extra.INSTANCE.SystemParametersInfoA(87, 0, 0, 2);
     }

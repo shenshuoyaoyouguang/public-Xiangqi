@@ -5,6 +5,7 @@ import com.sojourners.chess.linker.LinuxGraphLinker;
 import com.sojourners.chess.linker.LinkerCallBack;
 import com.sojourners.chess.linker.MacosGraphLinker;
 import com.sojourners.chess.linker.WindowsGraphLinker;
+import com.sojourners.chess.util.DialogUtils;
 import com.sojourners.chess.util.XiangqiUtils;
 import javafx.application.Platform;
 import javafx.scene.control.ComboBox;
@@ -88,5 +89,10 @@ public class LinkController implements LinkerCallBack {
                 log.log(System.Logger.Level.WARNING, "连线走子被拒绝（疑似送将或识别出非法着法），棋盘未更新: " + x1 + "," + y1 + " -> " + x2 + "," + y2);
             }
         });
+    }
+
+    @Override
+    public void linkerNotify(String message) {
+        Platform.runLater(() -> DialogUtils.showWarningDialog("提示", message));
     }
 }

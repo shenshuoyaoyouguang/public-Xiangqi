@@ -15,6 +15,12 @@ public class MacosGraphLinker extends AbstractGraphLinker {
 
     private String windowId;
 
+    /**
+     * Constructs a macOS graph linker using AppleScript for window management.
+     *
+     * @param callBack the callback interface for notifying the controller of linking events
+     * @throws AWTException if Robot creation fails
+     */
     public MacosGraphLinker(LinkerCallBack callBack) throws AWTException {
         super(callBack);
     }

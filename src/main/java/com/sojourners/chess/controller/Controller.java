@@ -53,6 +53,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class Controller implements ChessManualCallBack, EngineHost, LinkHost, GameHost {
 
@@ -185,7 +187,12 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
     /**
      * 正在思考（用于连线判断）
      */
-    private volatile boolean isThinking;
+    private final AtomicBoolean isThinking = new AtomicBoolean(false);
+
+    /**
+     * 连线会话令牌：每次开启连线递增，trickAutoClick 据此丢弃过期代点请求
+     */
+    private final AtomicLong linkSession = new AtomicLong(0);
 
     /**
      * 变招列表
@@ -292,7 +299,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
 
     @Override
     public void setThinking(boolean thinking) {
-        this.isThinking = thinking;
+        this.isThinking.set(thinking);
     }
 
     @Override
@@ -337,7 +344,12 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
 
     @Override
     public boolean isThinking() {
-        return this.isThinking;
+        return this.isThinking.get();
+    }
+
+    @Override
+    public long getLinkSession() {
+        return linkSession.get();
     }
 
     @Override
@@ -477,6 +489,11 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
         }
     }
 
+    /**
+     * Applies bookkeeping for a move: updates the manual, sets the manual list on the board, refreshes the chart, and toggles turn.
+     *
+     * @param move the move string to apply
+     */
     private void applyMoveBookkeeping(String move) {
         // 记录棋谱
         List<String> nextList = chessManualHandle.boardMove(move, board.translate(move, true));
@@ -642,6 +659,7 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
 
         linkMode.setValue(!linkMode.getValue());
         if (linkMode.getValue()) {
+            linkSession.incrementAndGet();
             graphLinker.start();
         } else {
             session.stopGraphLink();
@@ -1003,7 +1021,8 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
             });
 
             if (linkMode.getValue()) {
-                engineController.autoClickTactic(s);
+                long session = linkSession.get();
+                Thread.startVirtualThread(() -> engineController.autoClickTactic(s, session));
             }
         }
     }

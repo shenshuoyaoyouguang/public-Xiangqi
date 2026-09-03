@@ -13,6 +13,12 @@ public class LinuxGraphLinker extends AbstractGraphLinker {
 
     private String windowId;
 
+    /**
+     * Constructs a Linux graph linker using xdotool for window management.
+     *
+     * @param callBack the callback interface for notifying the controller of linking events
+     * @throws AWTException if Robot creation fails
+     */
     public LinuxGraphLinker(LinkerCallBack callBack) throws AWTException {
         super(callBack);
     }

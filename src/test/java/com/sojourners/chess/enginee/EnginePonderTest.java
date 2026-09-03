@@ -11,6 +11,7 @@ import java.io.StringWriter;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -51,6 +52,10 @@ class EnginePonderTest {
         Engine e = (Engine) unsafe.allocateInstance(Engine.class);
         set(e, "cb", cb);
         set(e, "writer", new BufferedWriter(out));
+        // allocateInstance 跳过构造器，final 引用类型字段需显式初始化
+        set(e, "stopFlag", new AtomicBoolean(false));
+        set(e, "generation", new java.util.concurrent.atomic.AtomicLong(0));
+        set(e, "stopLock", new Object());
         return e;
     }
 
@@ -79,7 +84,7 @@ class EnginePonderTest {
         e.startPonder("fen", List.of("h2e2"), "h9g9");
         // 生产环境中 ponder 搜索的 info 流会在 thinkDetail 里复位 stopFlag（depth<5），
         // 测试没有引擎输出流，直接模拟复位以隔离 ponder 状态机
-        set(e, "stopFlag", false);
+        ((AtomicBoolean) get(e, "stopFlag")).set(false);
     }
 
     @Test

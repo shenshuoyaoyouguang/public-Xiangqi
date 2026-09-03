@@ -1,5 +1,7 @@
 package com.sojourners.chess.yolo;
 
+import com.sojourners.chess.config.Properties;
+
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
@@ -7,13 +9,19 @@ import java.util.List;
 
 public class Yolo11Model extends Yolo5Model {
 
-    float CONFIDENCE = 0.5f;
-
     @Override
     public String getModelPath() {
         return "model/yolov11.onnx";
     }
 
+    /**
+     * Preprocesses an image for YOLOv11 inference: resizes with bilinear interpolation, centers in a 640x640 canvas
+     * with padding, and normalizes pixel values to [0,1].
+     *
+     * @param image the input image
+     * @param rate  the scaling factor (to fit within 640x640)
+     * @return a 3x640x640 float array (RGB channels)
+     */
     float[][][] processInput(BufferedImage image, float rate) {
 
         int destW = Math.round(image.getWidth() * rate);
@@ -52,6 +60,14 @@ public class Yolo11Model extends Yolo5Model {
         return arr;
     }
 
+    /**
+     * Processes YOLOv11 model output (transposed format) and applies confidence filtering and NMS.
+     *
+     * @param output the raw model output array
+     * @param img    the original image (for coordinate scaling)
+     * @param rate   the scaling factor used during preprocessing
+     * @return a list of detection results after NMS
+     */
     List<DetectResult> processOutput(float[] output, BufferedImage img, float rate) {
         List<DetectResult> list = new ArrayList<>();
 
@@ -61,6 +77,8 @@ public class Yolo11Model extends Yolo5Model {
         int sizeClasses = labels.length;
         int stride = 4 + sizeClasses;
         int size = output.length / stride;
+
+        float confidenceThreshold = Properties.getInstance().getLinkConfidence();
 
         for(int i = 0; i < size; ++i) {
             int indexBase = i * stride;
@@ -75,7 +93,7 @@ public class Yolo11Model extends Yolo5Model {
             }
 
             float score = maxClass;
-            if (score > CONFIDENCE) {
+            if (score > confidenceThreshold) {
                 float xPos = output[reshape(indexBase, stride, size)];
                 float yPos = output[reshape(indexBase + 1, stride, size)];
                 float w = output[reshape(indexBase + 2, stride, size)];
@@ -88,6 +106,14 @@ public class Yolo11Model extends Yolo5Model {
         return nms(list);
     }
 
+    /**
+     * Reshapes the flat output index to access transposed YOLOv11 output (box/class data is transposed vs YOLOv5).
+     *
+     * @param i      the flat index
+     * @param stride the stride (number of attributes per detection)
+     * @param size   the number of detections
+     * @return the reshaped index
+     */
     private int reshape(int i, int stride, int size) {
         int n = i / stride;
         int m = i % stride;

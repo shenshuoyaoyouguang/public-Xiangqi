@@ -12,6 +12,7 @@ import java.io.*;
 import java.security.SecureRandom;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 引擎封装
@@ -46,7 +47,25 @@ public class Engine {
     /**
      * 停止标志位
      */
-    private volatile boolean stopFlag;
+    private final AtomicBoolean stopFlag = new AtomicBoolean(false);
+
+    /**
+     * 是否有活跃的 analysis 搜索（仅 analysis 路径置 true，ponder 不走此路径）
+     */
+    private volatile boolean searchActive;
+
+    /**
+     * analysis 世代号：每次发起 analysis 递增，bestmove 据此丢弃过期结果
+     */
+    private final AtomicLong generation = new AtomicLong(0);
+    private volatile long currentGeneration = 0;
+
+    /**
+     * stop 屏障：stop() 等待 bestMove 消费 stop 信号后再发起新 analysis
+     */
+    private final Object stopLock = new Object();
+    private volatile boolean stopConsumed = true;
+    private static final long STOP_CONSUME_TIMEOUT = 1000L;
 
     // IT-11.1: ponder 后台思考状态（ponderhitSent：已通知引擎命中，其后的 bestmove 为本方回合着法）
     private volatile boolean pondering;
@@ -72,6 +91,13 @@ public class Engine {
         INFINITE;
     }
 
+    /**
+     * Constructs and initializes an engine instance by launching the engine process and configuring options.
+     *
+     * @param ec the engine configuration (path, protocol, options)
+     * @param cb the callback for receiving engine output (bestmove, think details, book results)
+     * @throws IOException if the engine process cannot be started
+     */
     public Engine(EngineConfig ec, EngineCallBack cb) throws IOException {
         this.protocol = ec.getProtocol();
         this.engineName = ec.getName();
@@ -117,10 +143,20 @@ public class Engine {
         }
     }
 
+    /**
+     * Gets the MultiPV setting (number of principal variations to analyze).
+     *
+     * @return the MultiPV value
+     */
     public int getMultiPV() {
         return multiPV;
     }
 
+    /**
+     * Sleeps for the specified time, logging a warning if interrupted.
+     *
+     * @param t milliseconds to sleep
+     */
     private void sleep(long t) {
         try {
             Thread.sleep(t);
@@ -129,6 +165,13 @@ public class Engine {
         }
     }
 
+    /**
+     * Tests an engine executable to detect its protocol (UCI or UCCI) and extract default options.
+     *
+     * @param filePath the path to the engine executable
+     * @param options  a map to populate with detected option names and default values
+     * @return "uci" if UCI protocol detected, "ucci" if UCCI detected, null if neither
+     */
     public static String test(String filePath, LinkedHashMap<String, String> options) {
         Process p = null;
         Thread h = null;
@@ -201,6 +244,12 @@ public class Engine {
         }
     }
 
+    /**
+     * Validates that a move string is well-formed (4 characters, valid file/rank ranges).
+     *
+     * @param move the move string to validate
+     * @return true if the move is valid format, false otherwise
+     */
     private boolean validateMove(String move) {
         if (move == null || move.isEmpty() || move.length() != 4) {
             return false;
@@ -213,9 +262,24 @@ public class Engine {
         }
         return true;
     }
+    /**
+     * Processes a bestmove response from the engine, applying stop barrier logic, ponder state filtering, and generation staleness checks.
+     * If valid, forwards the bestmove to the callback after applying configured delay.
+     *
+     * @param msg the bestmove line from the engine (e.g., "bestmove h2e2 ponder h9g7")
+     */
     private void bestMove(String msg) {
-        if (stopFlag) {
-            stopFlag = false;
+        long gen = currentGeneration;
+        searchActive = false;
+        boolean stale = stopFlag.getAndSet(false);
+        synchronized (stopLock) {
+            stopConsumed = true;
+            stopLock.notifyAll();
+        }
+        if (stale) {
+            return;
+        }
+        if (gen != currentGeneration) {
             return;
         }
         if (pondering && !ponderhitSent) {
@@ -237,6 +301,12 @@ public class Engine {
         }
         cb.bestMove(str[1], str.length == 4 ? str[3] : null);
     }
+    /**
+     * Parses an info line from the engine (depth, score, nps, time, pv, multipv) and forwards it to the callback.
+     * Also manages stopFlag logic based on depth and time to prevent premature stop acknowledgment.
+     *
+     * @param msg the info line from the engine
+     */
     private void thinkDetail(String msg) {
         String[] str = msg.split(" ");
         ThinkData td = new ThinkData();
@@ -296,11 +366,11 @@ public class Engine {
         }
 
         if (td.getDepth() != null && td.getDepth() < 5) {
-            stopFlag = false;
+            stopFlag.set(false);
         }
         if (td.getTime() != null) {
             if (td.getTime() < this.time || td.getTime() > 0 && td.getTime() < 70) {
-                stopFlag = false;
+                stopFlag.set(false);
             }
             this.time = td.getTime();
         }
@@ -310,6 +380,14 @@ public class Engine {
         }
     }
 
+    /**
+     * Starts analysis for the given position, first querying opening book if enabled, then falling back to engine analysis.
+     *
+     * @param fenCode the FEN code of the position
+     * @param moves   the move list leading to this position
+     * @param board   the board representation (for book lookup)
+     * @param redGo   true if red to move
+     */
     public void analysis(String fenCode, List<String> moves, char[][] board, boolean redGo) {
         Thread.startVirtualThread(() -> {
             if (Properties.getInstance().getBookSwitch()) {
@@ -331,8 +409,18 @@ public class Engine {
         });
     }
 
+    /**
+     * Starts engine analysis for the given position with optional searchmoves restriction (tactics mode).
+     *
+     * @param fenCode    the FEN code of the position
+     * @param moves      the move list leading to this position
+     * @param tacticList optional list of candidate moves to restrict search (searchmoves), or null for unrestricted
+     */
     public void analysis(String fenCode, List<String> moves, List<String> tacticList) {
         stop();
+        awaitStopConsumed();
+
+        currentGeneration = generation.incrementAndGet();
 
         if (threadNumChange) {
             cmd(("uci".equals(this.protocol) ? "setoption name Threads value " : "setoption Threads ") + threadNum);
@@ -372,17 +460,52 @@ public class Engine {
         } else {
             cmd("go infinite" + (hasTactics ? sb.toString() : ""));
         }
+        searchActive = true;
     }
 
+    /**
+     * Requests the engine to return its current best move immediately by sending the stop command.
+     */
     public void moveNow() {
         cmd("stop");
     }
 
+    /**
+     * Stops the current analysis or ponder search. Sets the stop barrier if a search is active to ensure subsequent
+     * analysis waits for the stop to be consumed by bestMove.
+     */
     public void stop() {
-        stopFlag = true;
+        if (searchActive) {
+            synchronized (stopLock) {
+                stopConsumed = false;
+            }
+        }
+        stopFlag.set(true);
+        cmd("stop");
         pondering = false;
         ponderhitSent = false;
-        cmd("stop");
+    }
+
+    /**
+     * 等待 bestMove 消费 stop 信号，避免快速连续 analysis 时旧 bestmove 污染新局面。
+     * 超时 1s 兜底，防止引擎异常无 bestmove 时死等。
+     */
+    private void awaitStopConsumed() {
+        synchronized (stopLock) {
+            long deadline = System.currentTimeMillis() + STOP_CONSUME_TIMEOUT;
+            while (!stopConsumed) {
+                long remaining = deadline - System.currentTimeMillis();
+                if (remaining <= 0) {
+                    break;
+                }
+                try {
+                    stopLock.wait(remaining);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
     }
 
     /**
@@ -408,8 +531,14 @@ public class Engine {
         cmd("go ponder" + ponderLimit());
         pondering = true;
         ponderhitSent = false;
+        // ponder 不走 analysis 路径，显式清除活跃标志，避免 stop() 误触 stop 屏障
+        searchActive = false;
     }
 
+    /**
+     * Notifies the engine that the ponder prediction was correct (opponent played the expected move).
+     * Only sends ponderhit once per ponder session.
+     */
     public void ponderhit() {
         if (pondering && !ponderhitSent) {
             cmd("ponderhit");
@@ -417,7 +546,11 @@ public class Engine {
         }
     }
 
-    // 按当前分析模型拼装 go ponder 的时限参数（INFINITE 无参数）
+    /**
+     * Builds the time limit parameters for "go ponder" based on the current analysis model.
+     *
+     * @return the limit string (e.g., " depth 12", " movetime 5000", " nodes 4096", or "" for INFINITE)
+     */
     private String ponderLimit() {
         if (analysisModel == AnalysisModel.FIXED_STEPS) {
             return " depth " + analysisValue;
@@ -429,10 +562,20 @@ public class Engine {
         return "";
     }
 
+    /**
+     * Checks if the engine is currently pondering (background thinking on predicted move).
+     *
+     * @return true if pondering is active, false otherwise
+     */
     public boolean isPondering() {
         return pondering;
     }
 
+    /**
+     * Sends a command to the engine via the writer stream and flushes it.
+     *
+     * @param command the command string to send (without line terminator)
+     */
     private void cmd(String command) {
         log.log(System.Logger.Level.DEBUG, "引擎命令: " + command);
         try {
@@ -443,6 +586,11 @@ public class Engine {
         }
     }
 
+    /**
+     * Sets the engine thread count. The change will be applied before the next analysis.
+     *
+     * @param threadNum the number of threads to use
+     */
     public void setThreadNum(int threadNum) {
         if (threadNum != this.threadNum) {
             this.threadNum = threadNum;
@@ -451,6 +599,11 @@ public class Engine {
 
     }
 
+    /**
+     * Sets the engine hash table size in MB. The change will be applied before the next analysis.
+     *
+     * @param hashSize the hash size in megabytes
+     */
     public void setHashSize(int hashSize) {
         if (hashSize != this.hashSize) {
             this.hashSize = hashSize;
@@ -458,11 +611,20 @@ public class Engine {
         }
     }
 
+    /**
+     * Sets the analysis time control model and value.
+     *
+     * @param model the analysis model (FIXED_TIME, FIXED_STEPS, FIXED_NODES, or INFINITE)
+     * @param v     the value (milliseconds for time, depth for steps, node count for nodes, ignored for infinite)
+     */
     public void setAnalysisModel(AnalysisModel model, long v) {
         this.analysisModel = model;
         this.analysisValue = v;
     }
 
+    /**
+     * Closes the engine by sending quit, interrupting the reader thread, destroying the process, and closing streams.
+     */
     public void close() {
         try {
             if (process.isAlive()) {
