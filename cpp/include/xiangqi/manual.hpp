@@ -14,6 +14,8 @@ public:
     static std::optional<ChessManual> open(const std::filesystem::path& file);
     static bool save(const ChessManual& manual, const std::filesystem::path& file);
     static std::string to_text(const ChessManual& manual, bool include_remarks = true);
+    // 当前构建/系统是否可用 GBK(或 CP936) 解码器，供调用方按能力探测而非假设。
+    static bool gbk_supported();
 };
 
 // TXQ 是 Java ObjectOutputStream 格式，不能由 C++ 标准库直接兼容。

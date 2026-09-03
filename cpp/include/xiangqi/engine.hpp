@@ -68,6 +68,7 @@ public:
 
 private:
     bool send(std::string command);
+    void close_locked();
     std::string ponder_limit() const;
     void handle_bestmove(std::string_view line);
     void handle_info(std::string_view line);

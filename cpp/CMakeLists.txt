@@ -15,6 +15,19 @@ add_library(xiangqi_core
 
 target_include_directories(xiangqi_core PUBLIC include)
 
+if (NOT WIN32)
+    # POSIX 下 GBK 解码依赖系统 iconv；显式探测并链接（glibc/musl/macOS 通常已在 libc）。
+    # 缺失时 core 仍可用，只是 PGN 读不了 GBK 文件（PgnManual::gbk_supported() 可探测）。
+    include(CheckIncludeFiles)
+    check_include_files("iconv.h" XIANGQI_HAVE_ICONV)
+    if (XIANGQI_HAVE_ICONV)
+        find_library(XIANGQI_ICONV_LIBRARY NAMES iconv)
+        if (XIANGQI_ICONV_LIBRARY)
+            target_link_libraries(xiangqi_core PRIVATE ${XIANGQI_ICONV_LIBRARY})
+        endif()
+    endif()
+endif()
+
 if (MSVC)
     set(xiangqi_warning_options /W4 /WX /utf-8 /permissive-)
 else()

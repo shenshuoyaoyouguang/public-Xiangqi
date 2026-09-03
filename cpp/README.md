@@ -6,7 +6,7 @@
 
 - `board`：初始局面、FEN 读写与方向翻转、棋子走法、将军/将杀、局面校验、ICCS/中文着法转换
 - `model`：棋谱节点、棋谱容器、开局库结果、引擎配置和思考数据
-- `manual`：PGN（Chinese/ICCS）读写、主线和注释
+- `manual`：PGN（Chinese/ICCS）读写、主线和注释；编码探测顺序 UTF-8 BOM → UTF-16 BOM → UTF-8 → GBK（Windows 内置；POSIX 需系统 iconv，可用 `PgnManual::gbk_supported()` 探测）→ ISO-8859-1 兜底（任意字节可读，未知编码可能乱码）
 - `openbook`：`OpenBook` 查询/排序接口和无依赖 `FunctionOpenBook` 适配器
 - `enginee`：UCI/UCCI 命令构造、`info`/`bestmove` 解析、ponder 状态机和 Windows/POSIX 进程管道
 

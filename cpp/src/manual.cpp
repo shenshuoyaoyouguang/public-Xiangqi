@@ -126,10 +126,8 @@ bool parse_tag_line(std::string_view line, std::string& tag, std::string& value)
             switch (escaped) {
             case '"': value += '"'; break;
             case '\\': value += '\\'; break;
-            case 'n': value += '\n'; break;
-            case 'r': value += '\r'; break;
-            case 't': value += '\t'; break;
             default:
+                // 标准 PGN 只定义 \" 与 \\；其余转义按字面量保留，保证与严格 PGN 读取器互操作。
                 value += '\\';
                 value += escaped;
                 break;
@@ -149,17 +147,15 @@ bool parse_tag_line(std::string_view line, std::string& tag, std::string& value)
 }
 
 std::string escape_tag_value(std::string_view value) {
+    // 标准 PGN 只允许 \" 与 \\ 两种转义；tag 行必须是单行文本，
+    // 控制字符无法转义，显式替换为空格。
     std::string escaped;
     escaped.reserve(value.size());
     for (const char c : value) {
-        switch (c) {
-        case '"': escaped += "\\\""; break;
-        case '\\': escaped += "\\\\"; break;
-        case '\n': escaped += "\\n"; break;
-        case '\r': escaped += "\\r"; break;
-        case '\t': escaped += "\\t"; break;
-        default: escaped += c; break;
-        }
+        if (static_cast<unsigned char>(c) < 0x20) escaped += ' ';
+        else if (c == '"') escaped += "\\\"";
+        else if (c == '\\') escaped += "\\\\";
+        else escaped += c;
     }
     return escaped;
 }
@@ -311,7 +307,12 @@ std::optional<std::string> decode_file_text(std::string_view bytes) {
     if (decode_gbk_with_iconv(bytes, decoded)) return decoded;
 #endif
 #endif
-    return std::nullopt;
+    // 兜底（对齐 Java 版最后一档 ISO-8859-1）：任意字节都可映射，逐字节转 UTF-8，
+    // 保证 open 不因编码探测失败而返回 nullopt。
+    std::string fallback;
+    fallback.reserve(bytes.size() * 2);
+    for (const char c : bytes) append_utf8(static_cast<unsigned char>(c), fallback);
+    return fallback;
 }
 
 void translate_mainline(ChessManual& manual, bool chinese) {
@@ -420,6 +421,26 @@ std::optional<ChessManual> PgnManual::from_text(std::string_view text) {
     }
     translate_mainline(manual, format == "Chinese");
     return manual;
+}
+
+bool PgnManual::gbk_supported() {
+#ifdef _WIN32
+    return true;
+#elif defined(XIANGQI_HAS_ICONV)
+    iconv_t converter = iconv_open("UTF-8", "GBK");
+    if (converter != reinterpret_cast<iconv_t>(-1)) {
+        iconv_close(converter);
+        return true;
+    }
+    converter = iconv_open("UTF-8", "CP936");
+    if (converter != reinterpret_cast<iconv_t>(-1)) {
+        iconv_close(converter);
+        return true;
+    }
+    return false;
+#else
+    return false;
+#endif
 }
 
 std::optional<ChessManual> PgnManual::open(const std::filesystem::path& file) {

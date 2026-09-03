@@ -2,6 +2,7 @@
 
 #include <charconv>
 #include <cstddef>
+#include <filesystem>
 #include <sstream>
 #include <system_error>
 
@@ -156,18 +157,21 @@ Engine::~Engine() {
 }
 
 bool Engine::start() {
-    // A previous child may have exited without an explicit close(). Reap its
-    // reader/process state before replacing the handles or thread.
-    {
-        std::lock_guard lifecycle_lock(lifecycle_mutex_);
-        if (running_) return true;
-    }
-    close();
+    // 检查、清理残留子进程、spawn、启动握手在同一次生命周期操作内完成，
+    // 否则并发 start() 会双重 spawn 并覆盖句柄（旧子进程泄漏，reader 线程被重复赋值）。
     std::lock_guard lifecycle_lock(lifecycle_mutex_);
     if (running_) return true;
+    close_locked();
     if (config_.path.empty()) {
         if (callbacks_.error) callbacks_.error("引擎路径为空");
         return false;
+    }
+    // 引擎可能相对自身目录加载资源（Java 版 Runtime.exec 同样传入父目录）。
+    std::string child_cwd;
+    std::error_code fs_error;
+    const auto parent_dir = std::filesystem::path(config_.path).parent_path();
+    if (!parent_dir.empty() && std::filesystem::exists(parent_dir, fs_error)) {
+        child_cwd = parent_dir.string();
     }
 
 #ifdef _WIN32
@@ -195,8 +199,9 @@ bool Engine::start() {
     startup.hStdOutput = child_stdout_write;
     startup.hStdError = child_stdout_write;
     PROCESS_INFORMATION process{};
-    const BOOL created = CreateProcessA(config_.path.c_str(), nullptr, nullptr, nullptr, TRUE,
-                                        CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process);
+    const BOOL created =
+        CreateProcessA(config_.path.c_str(), nullptr, nullptr, nullptr, TRUE, CREATE_NO_WINDOW, nullptr,
+                       child_cwd.empty() ? nullptr : child_cwd.c_str(), &startup, &process);
     CloseHandle(child_stdin_read);
     CloseHandle(child_stdout_write);
     if (!created) {
@@ -226,6 +231,7 @@ bool Engine::start() {
     }
     const pid_t process_id = fork();
     if (process_id == 0) {
+        if (!child_cwd.empty()) chdir(child_cwd.c_str());
         dup2(stdin_pipe[0], STDIN_FILENO);
         dup2(stdout_pipe[1], STDOUT_FILENO);
         dup2(stdout_pipe[1], STDERR_FILENO);
@@ -250,8 +256,21 @@ bool Engine::start() {
 
     running_ = true;
     reader_thread_ = std::thread(&Engine::reader_loop, this);
-    send(config_.protocol == "ucci" ? "ucci" : "uci");
-    for (const auto& [name, value] : config_.options) send(protocol_.option_command(name, value));
+    // 子进程若在握手前退出，reader 会清掉 running_（或写入直接 EPIPE），两种情况都视为启动失败。
+    bool started = send(config_.protocol == "ucci" ? "ucci" : "uci");
+    if (started) {
+        for (const auto& [name, value] : config_.options) {
+            if (!send(protocol_.option_command(name, value))) {
+                started = false;
+                break;
+            }
+        }
+    }
+    if (!started || !running_) {
+        close_locked();
+        if (callbacks_.error) callbacks_.error("引擎启动失败");
+        return false;
+    }
     return true;
 }
 
@@ -266,26 +285,36 @@ bool Engine::send(std::string command) {
         commands_.push_back(command);
     }
     command.push_back('\n');
+    // 只在取句柄时持锁；阻塞 I/O 期间不持有 process_mutex_，
+    // 否则引擎停止消费 stdin 时 close() 拿不到锁，无法终止进程（管道写满即死锁）。
 #ifdef _WIN32
-    std::lock_guard process_lock(process_mutex_);
-    if (input_write_ != nullptr && running_) {
+    void* input_write = nullptr;
+    {
+        std::lock_guard process_lock(process_mutex_);
+        input_write = input_write_;
+    }
+    if (input_write != nullptr && running_) {
         DWORD written = 0;
-        if (!WriteFile(static_cast<HANDLE>(input_write_), command.data(),
+        if (!WriteFile(static_cast<HANDLE>(input_write), command.data(),
                        static_cast<DWORD>(command.size()), &written, nullptr)) {
             running_ = false;
             return false;
         }
-    } else if (input_write_ != nullptr) {
+    } else if (input_write != nullptr) {
         return false;
     }
 #else
-    std::lock_guard process_lock(process_mutex_);
-    if (input_write_ >= 0 && running_) {
-        if (!write_pipe(input_write_, command)) {
+    int input_write = -1;
+    {
+        std::lock_guard process_lock(process_mutex_);
+        input_write = input_write_;
+    }
+    if (input_write >= 0 && running_) {
+        if (!write_pipe(input_write, command)) {
             running_ = false;
             return false;
         }
-    } else if (input_write_ >= 0) {
+    } else if (input_write >= 0) {
         return false;
     }
 #endif
@@ -471,6 +500,11 @@ std::vector<std::string> Engine::sent_commands() const {
 
 void Engine::close() {
     std::lock_guard lifecycle_lock(lifecycle_mutex_);
+    close_locked();
+}
+
+// 假定调用方已持有 lifecycle_mutex_（start() 在同一生命周期段内复用）。
+void Engine::close_locked() {
     const bool had_process =
         [&] {
             std::lock_guard lock(process_mutex_);

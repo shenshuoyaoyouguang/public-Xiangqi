@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <random>
 #include <stdexcept>
 #include <string_view>
 
@@ -132,6 +133,22 @@ void write_binary(const std::filesystem::path& file, std::string_view bytes) {
     require(static_cast<bool>(output), "write encoding fixture");
 }
 
+struct TestTempDir {
+    std::filesystem::path path;
+    ~TestTempDir() { std::filesystem::remove_all(path); }
+};
+
+// 唯一临时目录（RAII 清理），避免并发运行的测试进程互相覆盖/删除对方 fixture。
+TestTempDir make_test_temp_dir() {
+    std::random_device device;
+    for (int attempt = 0; attempt < 32; ++attempt) {
+        const std::filesystem::path candidate =
+            std::filesystem::temp_directory_path() / ("xiangqi_core_tests_" + std::to_string(device()));
+        if (std::filesystem::create_directory(candidate)) return TestTempDir{candidate};
+    }
+    throw std::runtime_error("create unique temp dir");
+}
+
 void manual_regression_tests() {
     const auto variations = PgnManual::from_text(
         "[Format \"Chinese\"]\n\n"
@@ -148,17 +165,25 @@ void manual_regression_tests() {
         "[Format \"Chinese\"]\n\n1.炮二平五 1...马８进７ *\n");
     require(compact_move_numbers && compact_move_numbers->head->list.size() == 1,
             "compact move number red move");
+    require(compact_move_numbers->head->list[0]->move == "h2e2", "compact move number red conversion");
     require(compact_move_numbers->head->list[0]->list.size() == 1,
             "compact move number black move");
+    require(compact_move_numbers->head->list[0]->list[0]->move == "h9g7", "compact move number black conversion");
 
     const auto escaped_tags = PgnManual::from_text(
         R"([Event "A \"quote\" and \\ path\nnext\rrow\tcolumn"]
 [Format "Chinese"]
 
 1. 炮二平五 *)");
-    require(escaped_tags && escaped_tags->name == "A \"quote\" and \\ path\nnext\rrow\tcolumn", "tag unescape");
+    // 标准 PGN 只定义 \" 与 \\ 转义，\n 等未知转义按字面量保留。
+    require(escaped_tags && escaped_tags->name == R"(A "quote" and \ path\nnext\rrow\tcolumn)", "tag unescape");
     const auto escaped_round_trip = PgnManual::from_text(PgnManual::to_text(*escaped_tags));
     require(escaped_round_trip && escaped_round_trip->name == escaped_tags->name, "tag escape round trip");
+
+    ChessManual control_tag_manual;
+    control_tag_manual.name = "a\nb";
+    const auto control_tag_text = PgnManual::to_text(control_tag_manual);
+    require(control_tag_text.find("[Event \"a b\"]") != std::string::npos, "control char in tag");
 
     const auto iccs = PgnManual::from_text(
         "[Format \"ICCS\"]\n\n1. a0a1 b9b8 *\n");
@@ -173,24 +198,35 @@ void manual_regression_tests() {
     const auto uppercase_iccs = PgnManual::from_text("\nA0-A1 *\n");
     require(uppercase_iccs && uppercase_iccs->head->list[0]->move == "a0a1", "uppercase iccs parse");
 
-    const auto temp = std::filesystem::temp_directory_path();
+    const TestTempDir temp_dir = make_test_temp_dir();
+    const auto temp = temp_dir.path;
     for (const bool little_endian : {true, false}) {
-        const auto file = temp / (little_endian ? "xiangqi_core_manual_utf16le.pgn"
-                                                : "xiangqi_core_manual_utf16be.pgn");
+        const auto file = temp / (little_endian ? "manual_utf16le.pgn" : "manual_utf16be.pgn");
         write_binary(file, utf16_bytes(std::u16string_view(u"[Event \"测试\"]\n[Format \"Chinese\"]\n\n1. 炮二平五 *\n"), little_endian));
         const auto decoded = PgnManual::open(file);
         const auto name = decoded ? decoded->name : std::string{};
-        std::filesystem::remove(file);
         require(decoded && name == "测试", "utf16 input");
     }
 
-    const auto gbk_file = temp / "xiangqi_core_manual_gbk.pgn";
-    const std::string gbk_name("\xb2\xe2\xca\xd4", 4);
-    write_binary(gbk_file, "[Event \"" + gbk_name + "\"]\n[Format \"Chinese\"]\n\n1. \xb1\xb2 *\n");
-    const auto gbk = PgnManual::open(gbk_file);
-    const auto gbk_decoded_name = gbk ? gbk->name : std::string{};
-    std::filesystem::remove(gbk_file);
-    require(gbk && gbk_decoded_name == "测试", "gbk input");
+    if (PgnManual::gbk_supported()) {
+        const auto gbk_file = temp / "manual_gbk.pgn";
+        const std::string gbk_name("\xb2\xe2\xca\xd4", 4);
+        write_binary(gbk_file, "[Event \"" + gbk_name + "\"]\n[Format \"Chinese\"]\n\n1. \xb1\xb2 *\n");
+        const auto gbk = PgnManual::open(gbk_file);
+        const auto gbk_decoded_name = gbk ? gbk->name : std::string{};
+        require(gbk && gbk_decoded_name == "测试", "gbk input");
+    }
+
+    // Latin-1 的 é（0xE9）不是合法 UTF-8/GBK 序列，必须走 ISO-8859-1 兜底而不是 nullopt。
+    const auto latin1_file = temp / "manual_latin1.pgn";
+    write_binary(latin1_file, "[Event \"Jos\xe9\"]\n[Format \"Chinese\"]\n\n1. \xb1\xb2 *\n");
+    const auto latin1 = PgnManual::open(latin1_file);
+    const auto latin1_name = latin1 ? latin1->name : std::string{};
+    require(latin1.has_value(), "latin1 input opens");
+#ifndef _WIN32
+    // Windows 侧由 CP936 先行解码（历史行为），只验证文件可打开。
+    require(latin1_name == "Jos\xc3\xa9", "latin1 decoded as iso-8859-1");
+#endif
 }
 
 void openbook_tests() {
