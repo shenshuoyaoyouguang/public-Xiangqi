@@ -23,6 +23,9 @@ public abstract class OnnxModel {
 
     OrtEnvironment env;
 
+    /**
+     * Constructs an ONNX model by initializing the ONNX runtime and loading the model file.
+     */
     public OnnxModel() {
         try {
             env = OrtEnvironment.getEnvironment();
@@ -39,10 +42,28 @@ public abstract class OnnxModel {
         }
     }
 
+    /**
+     * Gets the relative path to the model file (to be appended to jar path).
+     *
+     * @return the model file path relative to jar directory
+     */
     public abstract String getModelPath();
 
+    /**
+     * Finds the board position in the given image.
+     *
+     * @param img the screenshot image to analyze
+     * @return a Rectangle representing the board's bounding box, or null if not found
+     */
     public abstract java.awt.Rectangle findBoardPosition(BufferedImage img);
 
+    /**
+     * Recognizes chess pieces on the board and populates the board array.
+     *
+     * @param img   the board region image
+     * @param board a 10x9 char array to populate with piece labels
+     * @return true if recognition succeeded, false otherwise
+     */
     public abstract boolean findChessBoard(BufferedImage img, char[][] board);
 
 }

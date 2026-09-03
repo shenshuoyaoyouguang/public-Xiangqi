@@ -42,6 +42,15 @@ public class MouseExecutor implements IMoveExecutor {
         return ExecuteResult.FAILED;
     }
 
+    /**
+     * Attempts one click-and-verify cycle: clicks the move, waits, captures screenshot, and verifies the move applied.
+     *
+     * @param action the move action
+     * @param p1     source pixel point
+     * @param p2     destination pixel point
+     * @param ctx    execution context
+     * @return SUCCESS if move verified, SCREENSHOT_INVALID if capture/recognition failed, FAILED if move didn't apply
+     */
     private ExecuteResult tryClickAndVerify(Action action, Point p1, Point p2, ExecContext ctx) {
         ctx.primaryClick.accept(new Point(p1), new Point(p2));
         sleep(ctx.verifyWaitMs > 0 ? ctx.verifyWaitMs : VERIFY_WAIT_MS);
@@ -60,7 +69,12 @@ public class MouseExecutor implements IMoveExecutor {
     }
 
     /**
-     * 校验走棋是否真正生效：起点原应有棋子且点击后变空，终点有棋子落入
+     * Verifies that a move actually applied by checking that the source square became empty and the destination has a piece.
+     *
+     * @param before the board state before the move (or null to skip verification)
+     * @param after  the board state after the move
+     * @param action the move action
+     * @return true if the move applied (source empty, destination occupied), false otherwise
      */
     private static boolean moveApplied(char[][] before, char[][] after, Action action) {
         if (before == null) {
@@ -72,7 +86,13 @@ public class MouseExecutor implements IMoveExecutor {
     }
 
     /**
-     * 棋盘坐标转像素坐标
+     * Converts board coordinates to pixel coordinates within the board region.
+     * Applies edge offsets to avoid clicking too close to the border.
+     *
+     * @param x        the column index [0,8]
+     * @param y        the row index [0,9]
+     * @param boardPos the board region rectangle
+     * @return the pixel point in window-relative coordinates
      */
     public static Point getPosition(int x, int y, Rectangle boardPos) {
         double pieceWith = boardPos.width / (8 + OnnxModel.PADDING * 2);
@@ -92,6 +112,11 @@ public class MouseExecutor implements IMoveExecutor {
         return p;
     }
 
+    /**
+     * Sleeps for the specified duration, handling interruption by setting the interrupt flag.
+     *
+     * @param ms milliseconds to sleep
+     */
     private static void sleep(long ms) {
         try {
             Thread.sleep(ms);

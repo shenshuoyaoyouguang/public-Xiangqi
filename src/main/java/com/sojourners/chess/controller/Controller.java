@@ -489,6 +489,11 @@ public class Controller implements ChessManualCallBack, EngineHost, LinkHost, Ga
         }
     }
 
+    /**
+     * Applies bookkeeping for a move: updates the manual, sets the manual list on the board, refreshes the chart, and toggles turn.
+     *
+     * @param move the move string to apply
+     */
     private void applyMoveBookkeeping(String move) {
         // 记录棋谱
         List<String> nextList = chessManualHandle.boardMove(move, board.translate(move, true));

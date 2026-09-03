@@ -157,6 +157,11 @@ public class Properties {
         this.openBookList = openBookList;
     }
 
+    /**
+     * Gets the singleton Properties instance, loading from properties.json if available, or creating defaults.
+     *
+     * @return the Properties singleton
+     */
     public static synchronized Properties getInstance() {
         if (prop == null) {
             // 优先读取新的 JSON 配置
@@ -189,7 +194,11 @@ public class Properties {
         return prop;
     }
 
-    /** 默认配置实例。 */
+    /**
+     * Creates a new Properties instance with default values.
+     *
+     * @return a Properties instance with default configuration
+     */
     public static Properties defaults() {
         Properties p = new Properties(ChessBoard.BoardSize.AUTOFIT_BOARD, true,
                 1, 16, "",
@@ -201,6 +210,9 @@ public class Properties {
         return p;
     }
 
+    /**
+     * Saves the current configuration to properties.json in the jar directory.
+     */
     public void save() {
         try {
             File file = new File(PathUtils.getJarPath() + "properties.json");
@@ -335,10 +347,20 @@ public class Properties {
         this.linkManualMove = linkManualMove;
     }
 
+    /**
+     * Gets the link recognition confidence threshold, clamped to (0,1] with a 0.5 fallback for invalid values.
+     *
+     * @return the confidence threshold
+     */
     public float getLinkConfidence() {
         return !(linkConfidence > 0f && linkConfidence <= 1f) ? 0.5f : linkConfidence;
     }
 
+    /**
+     * Sets the link recognition confidence threshold.
+     *
+     * @param linkConfidence the new confidence threshold
+     */
     public void setLinkConfidence(float linkConfidence) {
         this.linkConfidence = linkConfidence;
     }

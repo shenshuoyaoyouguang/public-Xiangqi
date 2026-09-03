@@ -39,6 +39,12 @@ public final class JsonPropertiesCodec {
 
     private JsonPropertiesCodec() {}
 
+    /**
+     * Serializes a Properties instance to JSON.
+     *
+     * @param p the Properties to serialize
+     * @return the JSON string
+     */
     public static String toJson(Properties p) {
         StringBuilder sb = new StringBuilder(2048);
         sb.append("{");
@@ -61,6 +67,14 @@ public final class JsonPropertiesCodec {
         return sb.toString();
     }
 
+    /**
+     * Writes a single key-value pair to the JSON builder, dispatching on type.
+     *
+     * @param sb    the string builder
+     * @param key   the field name
+     * @param value the field value
+     * @param type  the field type
+     */
     private static void writeValue(StringBuilder sb, String key, Object value, Class<?> type) {
         writeString(sb, key);
         sb.append(':');
@@ -86,6 +100,12 @@ public final class JsonPropertiesCodec {
         }
     }
 
+    /**
+     * Deserializes a JSON string to a Properties instance.
+     *
+     * @param json the JSON string
+     * @return the Properties instance
+     */
     public static Properties fromJson(String json) {
         Parser p = new Parser(json);
         JsonValue root = p.parseValue();
@@ -117,12 +137,25 @@ public final class JsonPropertiesCodec {
         return props;
     }
 
+    /**
+     * Extracts a string from a JsonValue, returning null for null/NULL types.
+     *
+     * @param v the JsonValue
+     * @return the string value, or null
+     */
     private static String strOrNull(JsonValue v) {
         if (v == null || v.type == JsonValue.Type.NULL) return null;
         if (v.type == JsonValue.Type.STRING) return v.str;
         return String.valueOf(v.number);
     }
 
+    /**
+     * Applies a single field from JSON to the Properties instance, type-checking and converting as needed.
+     *
+     * @param props the Properties instance to update
+     * @param key   the field name
+     * @param v     the JSON value
+     */
     private static void applyField(Properties props, String key, JsonValue v) {
         Field f = FIELDS.get(key);
         if (f == null) {
@@ -166,6 +199,12 @@ public final class JsonPropertiesCodec {
         }
     }
 
+    /**
+     * Converts a JsonValue array to a List of Strings.
+     *
+     * @param v the JsonValue (expected to be ARRAY type)
+     * @return the list of strings, or empty list if not an array
+     */
     private static List<String> toStringList(JsonValue v) {
         List<String> out = new ArrayList<>();
         if (v == null || v.type != JsonValue.Type.ARRAY) return out;

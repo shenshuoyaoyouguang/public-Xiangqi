@@ -73,6 +73,12 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
      */
     private Rectangle lastWindowPos;
 
+    /**
+     * Constructs the abstract graph linker with the specified callback.
+     *
+     * @param callBack the callback interface for notifying the controller of linking events
+     * @throws AWTException if Robot creation fails
+     */
     public AbstractGraphLinker(LinkerCallBack callBack) throws AWTException {
         this.callBack = callBack;
         robot = new Robot();
@@ -91,6 +97,9 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
         getTargetWindowId();
     }
 
+    /**
+     * Starts the board scanning thread (resets board position and previous image state).
+     */
     void scan() {
         this.boardPos = null;
         this.prevImg = null;
@@ -98,6 +107,13 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
         this.thread.start();
     }
 
+    /**
+     * Checks if two board arrays are identical.
+     *
+     * @param board1 first board (10x9 char array)
+     * @param board2 second board (10x9 char array)
+     * @return true if both boards are non-null and every cell matches, false otherwise
+     */
     private boolean isSame(char[][] board1, char[][] board2) {
         if (board1 == null || board2 == null) {
             return false;
@@ -112,9 +128,16 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
         return true;
     }
 
+    /**
+     * Pauses the linking scan (stops processing new moves until resumed).
+     */
     public void pause() {
         this.pause = true;
     }
+
+    /**
+     * Resumes the linking scan (allows processing new moves).
+     */
     public void resume() {
         this.pause = false;
     }
@@ -256,6 +279,15 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
         }
     }
 
+    /**
+     * Determines if the detected action needs animation confirmation (waiting for piece to settle).
+     * Required for rook/cannon captures where the captured piece may still be animating.
+     *
+     * @param linkBoard   the board state recognized from the link
+     * @param engineBoard the board state from the engine
+     * @param action      the detected action
+     * @return true if animation confirmation is needed, false otherwise
+     */
     private boolean needConfirm(char[][] linkBoard, char[][] engineBoard, Action action) {
         if (action == null) {
             return false;
@@ -511,6 +543,11 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
         }
     }
 
+    /**
+     * Sleeps for the specified time, handling InterruptedException by re-interrupting the thread.
+     *
+     * @param time milliseconds to sleep
+     */
     void sleep(long time) {
         try {
             Thread.sleep(time);
@@ -521,9 +558,10 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
     }
 
     /**
-     * 前台截图
-     * @param windowPos
-     * @return
+     * Captures a screenshot in foreground mode using Robot.
+     *
+     * @param windowPos the screen region to capture
+     * @return the captured image, or null if windowPos has zero width or height
      */
     public BufferedImage screenshotByFront(Rectangle windowPos) {
         if (windowPos.width == 0 || windowPos.height == 0) {
@@ -533,10 +571,12 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
     }
 
     /**
-     * 前台点击
-     * @param windowPos
-     * @param p1
-     * @param p2
+     * Performs a mouse click in foreground mode by moving the cursor to p1, clicking, moving to p2, and clicking again.
+     * Restores the original cursor position after completion.
+     *
+     * @param windowPos the target window's position and size
+     * @param p1        first click point (source) in window-relative coordinates
+     * @param p2        second click point (destination) in window-relative coordinates
      */
     @Override
     public void mouseClickByFront(Rectangle windowPos, Point p1, Point p2) {
@@ -567,8 +607,9 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
     }
 
     /**
-     * 寻找棋盘区域
-     * @return
+     * Finds the board position in the target window. If already found, validates that the window hasn't moved.
+     *
+     * @return true if board position is found and valid, false if not found or window geometry changed
      */
     boolean findBoardPosition() {
         if (this.boardPos != null) {
@@ -596,9 +637,10 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
     }
 
     /**
-     * 截图
-     * @param fullScreen
-     * @return
+     * Captures a screenshot of either the full window or just the board region.
+     *
+     * @param fullScreen true to capture the full window, false to capture only the board region
+     * @return the captured image
      */
     BufferedImage screenshot(boolean fullScreen) {
         if (prop.isLinkBackMode()) {
@@ -617,6 +659,13 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
     }
 
 
+    /**
+     * Finds the chess board state by capturing and recognizing the current board region.
+     * Implements frame-based deduplication: if the screenshot is identical to the previous frame, returns false.
+     *
+     * @param board the 10x9 char array to populate with recognized pieces
+     * @return true if board was successfully recognized and validated, false otherwise
+     */
     private boolean findChessBoard(char[][] board) {
         long start = System.currentTimeMillis();
         // 截图
@@ -661,6 +710,14 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
      */
     private volatile long lastSampleTime;
 
+    /**
+     * Saves a failed recognition sample (screenshot and metadata) to the samples/ directory for quality analysis.
+     * Throttled to once per 10 seconds to avoid disk flooding during repeated failures.
+     *
+     * @param img   the screenshot that failed recognition
+     * @param board the recognized board (or null if AI recognition failed entirely)
+     * @param start the timestamp when recognition started (for timing calculation)
+     */
     private void saveFailedSample(BufferedImage img, char[][] board, long start) {
         long now = System.currentTimeMillis();
         if (now - lastSampleTime < 10_000) {
@@ -695,6 +752,13 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
         }
     }
 
+    /**
+     * Checks pixel-by-pixel equality between two images.
+     *
+     * @param a first image
+     * @param b second image
+     * @return true if both images are non-null, have the same dimensions, and identical RGB values at every pixel
+     */
     private boolean imageEqual(BufferedImage a, BufferedImage b) {
         if (a == null || b == null || a.getWidth() != b.getWidth() || a.getHeight() != b.getHeight()) {
             return false;
@@ -709,6 +773,13 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
         return true;
     }
 
+    /**
+     * Detects if the board is reversed (red at top) by locating the kings, and flips the board array if necessary.
+     *
+     * @param board the board to check and potentially flip in-place
+     * @return true if the board was reversed (and has been flipped), false if normal orientation
+     * @throws Exception if both kings are missing
+     */
     private boolean reverse(char[][] board) throws Exception {
         // 是否翻转
         int rowRedKing = -1, rowBlackKing = -1;
@@ -738,7 +809,11 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
     }
 
     /**
-     * 将逻辑方向（已翻转）棋盘转为物理方向副本，供 MouseExecutor 截图验证使用
+     * Converts a logical (already flipped to standard orientation) board to a physical (on-screen) board copy for verification.
+     *
+     * @param logical   the board in logical orientation (red at bottom)
+     * @param isReverse whether the screen display is reversed
+     * @return the physical board (same as logical if not reversed, flipped copy if reversed)
      */
     private static char[][] toPhysical(char[][] logical, boolean isReverse) {
         if (!isReverse) {
@@ -754,8 +829,9 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
     }
 
     /**
-     * 初始化棋盘局面
-     * @return
+     * Initializes the board state by recognizing the current position and notifying the callback with the FEN code.
+     *
+     * @return true if initialization succeeded, false if recognition or reverse detection failed
      */
     private boolean initChessBoard() {
         if (!findChessBoard(board2)) {
@@ -779,11 +855,12 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
     }
 
     /**
-     * 自动点击走棋
-     * @param x1
-     * @param y1
-     * @param x2
-     * @param y2
+     * Automatically clicks on the board to execute a move (used for manual move forwarding in link mode).
+     *
+     * @param x1 source column [0,8]
+     * @param y1 source row [0,9]
+     * @param x2 destination column [0,8]
+     * @param y2 destination row [0,9]
      */
     public void autoClick(int x1, int y1, int x2, int y2) {
 
@@ -809,7 +886,12 @@ public abstract class AbstractGraphLinker implements GraphLinker, Runnable {
         this.prevImg = null;
     }
 
-    // find chess board from image
+    /**
+     * Recognizes chess pieces on the board from an image (used for testing or external calls).
+     *
+     * @param img the board image to analyze
+     * @return a 10x9 char array with recognized pieces, or null if recognition failed
+     */
     public char[][] findChessBoard(BufferedImage img) {
         char[][] tmp = new char[10][9];
         if (this.recognizer.findChessBoard(img, tmp)) {

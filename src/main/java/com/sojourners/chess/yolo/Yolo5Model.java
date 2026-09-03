@@ -65,6 +65,11 @@ public class Yolo5Model extends OnnxModel {
         }
     }
 
+    /**
+     * Initializes a board array to all empty squares (spaces).
+     *
+     * @param board the 10x9 board to initialize
+     */
     private void setBlankBoard(char[][] board) {
         for (int i = 0; i < 10; i++) {
             for (int j = 0; j < 9; j++) {
@@ -73,6 +78,12 @@ public class Yolo5Model extends OnnxModel {
         }
     }
 
+    /**
+     * Extracts the board position from detection results by finding the largest detected board (label '0').
+     *
+     * @param results the detection results
+     * @return the board bounding box, or null if no board detected
+     */
     private java.awt.Rectangle findBoardPosition(List<DetectResult> results) {
         int boardCount = 0;
         java.awt.Rectangle boardPos = new java.awt.Rectangle();
@@ -144,6 +155,13 @@ public class Yolo5Model extends OnnxModel {
         }
     }
 
+    /**
+     * Runs YOLO inference on an image: preprocesses, runs the ONNX session, and postprocesses the output.
+     *
+     * @param image the input image
+     * @return the list of detection results after NMS
+     * @throws OrtException if ONNX runtime errors occur
+     */
     private List<DetectResult> predict(BufferedImage image) throws OrtException {
 
         List<DetectResult> list = null;
@@ -173,6 +191,13 @@ public class Yolo5Model extends OnnxModel {
         return list;
     }
 
+    /**
+     * Preprocesses an image for YOLOv5 inference: resizes with bilinear interpolation and normalizes to [0,1].
+     *
+     * @param image the input image
+     * @param rate  the scaling factor
+     * @return a 3x640x640 float array (RGB channels)
+     */
     float[][][] processInput(BufferedImage image, float rate) {
 
         int destW = Math.round(image.getWidth() * rate);
@@ -210,6 +235,12 @@ public class Yolo5Model extends OnnxModel {
         return arr;
     }
 
+    /**
+     * Applies non-maximum suppression to detection results, grouped by class label.
+     *
+     * @param list the raw detection results
+     * @return the filtered results after NMS
+     */
     List<DetectResult> nms(List<DetectResult> list) {
 
         List<DetectResult> results = new ArrayList<>();
@@ -247,19 +278,49 @@ public class Yolo5Model extends OnnxModel {
 
         return results;
     }
+    /**
+     * Computes the Intersection over Union (IoU) between two bounding boxes.
+     *
+     * @param a the first box
+     * @param b the second box
+     * @return the IoU ratio [0,1]
+     */
     private double boxIou(Rectangle a, Rectangle b) {
         return this.boxIntersection(a, b) / this.boxUnion(a, b);
     }
 
+    /**
+     * Computes the union area of two bounding boxes.
+     *
+     * @param a the first box
+     * @param b the second box
+     * @return the union area
+     */
     private double boxUnion(Rectangle a, Rectangle b) {
         double i = this.boxIntersection(a, b);
         return a.getWidth() * a.getHeight() + b.getWidth() * b.getHeight() - i;
     }
+    /**
+     * Computes the intersection area of two bounding boxes.
+     *
+     * @param a the first box
+     * @param b the second box
+     * @return the intersection area
+     */
     private double boxIntersection(Rectangle a, Rectangle b) {
         double w = this.overlap(a.getX(), a.getWidth(), b.getX(), b.getWidth());
         double h = this.overlap(a.getY(), a.getHeight(), b.getY(), b.getHeight());
         return w >= 0.0D && h >= 0.0D ? w * h : 0.0D;
     }
+    /**
+     * Computes the 1D overlap between two intervals defined by center and width.
+     *
+     * @param x1 center of first interval
+     * @param w1 width of first interval
+     * @param x2 center of second interval
+     * @param w2 width of second interval
+     * @return the overlap length
+     */
     private double overlap(double x1, double w1, double x2, double w2) {
         double l1 = x1 - w1 / 2.0D;
         double l2 = x2 - w2 / 2.0D;
@@ -270,6 +331,14 @@ public class Yolo5Model extends OnnxModel {
         return right - left;
     }
 
+    /**
+     * Processes YOLOv5 model output and applies confidence filtering and NMS.
+     *
+     * @param output the raw model output array
+     * @param img    the original image
+     * @param rate   the scaling factor
+     * @return the list of detection results after NMS
+     */
     List<DetectResult> processOutput(float[] output, BufferedImage img, float rate) {
         List<DetectResult> list = new ArrayList<>();
 

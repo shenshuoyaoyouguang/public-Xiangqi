@@ -13,6 +13,9 @@ public class YoloRecognizer implements IRecognizer {
 
     private final OnnxModel aiModel;
 
+    /**
+     * Constructs a YOLO recognizer using the YOLOv11 model as the default recognition engine.
+     */
     public YoloRecognizer() {
         this.aiModel = new Yolo11Model();
     }

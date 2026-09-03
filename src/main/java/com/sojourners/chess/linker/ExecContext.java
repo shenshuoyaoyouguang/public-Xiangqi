@@ -18,6 +18,17 @@ public class ExecContext {
     public final BiConsumer<Point, Point> primaryClick;
     public final BiConsumer<Point, Point> degradeClick;
 
+    /**
+     * Constructs an execution context for a move operation.
+     *
+     * @param boardPos      the board position rectangle in screen coordinates
+     * @param beforeBoard   the board state before the move (10x9 char array), used for verification
+     * @param verifyWaitMs  milliseconds to wait before taking verification screenshot (0 uses default)
+     * @param recognizer    the recognizer instance for verifying the move via screenshot
+     * @param screenshot    callback to capture a screenshot of the board region
+     * @param primaryClick  primary click method (front-mode or back-mode depending on configuration)
+     * @param degradeClick  fallback click method if primary fails (e.g., switch from back to front), or null if no fallback
+     */
     public ExecContext(Rectangle boardPos, char[][] beforeBoard, int verifyWaitMs,
                        IRecognizer recognizer, Supplier<BufferedImage> screenshot,
                        BiConsumer<Point, Point> primaryClick, BiConsumer<Point, Point> degradeClick) {

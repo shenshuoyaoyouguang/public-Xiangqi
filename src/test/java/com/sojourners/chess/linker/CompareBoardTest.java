@@ -9,6 +9,11 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class CompareBoardTest {
 
+    /**
+     * Creates an empty 10x9 board filled with spaces.
+     *
+     * @return an empty board array
+     */
     private static char[][] initialBoard() {
         char[][] b = new char[10][9];
         for (int i = 0; i < 10; i++) {
