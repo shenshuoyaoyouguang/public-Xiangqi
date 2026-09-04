@@ -3,6 +3,8 @@
 #include "xiangqi/model.hpp"
 
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <deque>
 #include <functional>
@@ -68,6 +70,9 @@ public:
 
 private:
     bool send(std::string command);
+    void finish_send();
+    bool wait_for_handshake(std::chrono::milliseconds timeout);
+    void drain_writers();
     void close_locked();
     std::string ponder_limit() const;
     void handle_bestmove(std::string_view line);
@@ -91,6 +96,15 @@ private:
     mutable std::mutex lifecycle_mutex_;
     mutable std::mutex command_mutex_;
     mutable std::mutex process_mutex_;
+    // 写协议见 send()/close_locked()：writers_active_ 登记在途写，
+    // 排空后 close 才能关闭句柄；write_mutex_ 只串行化实际 I/O。
+    mutable std::mutex write_mutex_;
+    std::condition_variable write_cv_;
+    int writers_active_ = 0;
+    // 启动握手（uciok/ucciok）状态，handshake_mutex_ 保护。
+    mutable std::mutex handshake_mutex_;
+    std::condition_variable handshake_cv_;
+    bool handshake_done_ = false;
     std::deque<std::string> commands_;
     std::thread reader_thread_;
 

@@ -184,6 +184,9 @@ void manual_regression_tests() {
     control_tag_manual.name = "a\nb";
     const auto control_tag_text = PgnManual::to_text(control_tag_manual);
     require(control_tag_text.find("[Event \"a b\"]") != std::string::npos, "control char in tag");
+    ChessManual del_tag_manual;
+    del_tag_manual.name = "a\x7f" "b";
+    require(PgnManual::to_text(del_tag_manual).find("[Event \"a b\"]") != std::string::npos, "del char in tag");
 
     const auto iccs = PgnManual::from_text(
         "[Format \"ICCS\"]\n\n1. a0a1 b9b8 *\n");

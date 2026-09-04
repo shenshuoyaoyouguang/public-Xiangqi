@@ -12,8 +12,9 @@
 
 #ifdef _WIN32
 #include <windows.h>
-#elif __has_include(<iconv.h>)
-#define XIANGQI_HAS_ICONV 1
+#elif defined(XIANGQI_HAS_ICONV)
+// XIANGQI_HAS_ICONV 由 CMake 探测（iconv_open 可编译可链接）后定义；
+// 只查 __has_include(<iconv.h>) 会在头文件存在但库不可链时造成链接失败。
 #include <cerrno>
 #include <iconv.h>
 #endif
@@ -147,12 +148,12 @@ bool parse_tag_line(std::string_view line, std::string& tag, std::string& value)
 }
 
 std::string escape_tag_value(std::string_view value) {
-    // 标准 PGN 只允许 \" 与 \\ 两种转义；tag 行必须是单行文本，
-    // 控制字符无法转义，显式替换为空格。
+    // 标准 PGN 只允许 \" 与 \\ 两种转义；tag 行必须是单行可打印文本，
+    // 控制字符（含 DEL 0x7f）无法转义，显式替换为空格。
     std::string escaped;
     escaped.reserve(value.size());
     for (const char c : value) {
-        if (static_cast<unsigned char>(c) < 0x20) escaped += ' ';
+        if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) == 0x7f) escaped += ' ';
         else if (c == '"') escaped += "\\\"";
         else if (c == '\\') escaped += "\\\\";
         else escaped += c;
@@ -307,8 +308,9 @@ std::optional<std::string> decode_file_text(std::string_view bytes) {
     if (decode_gbk_with_iconv(bytes, decoded)) return decoded;
 #endif
 #endif
-    // 兜底（对齐 Java 版最后一档 ISO-8859-1）：任意字节都可映射，逐字节转 UTF-8，
-    // 保证 open 不因编码探测失败而返回 nullopt。
+    // 兜底（对齐 Java 版最后一档 ISO-8859-1）：任意字节都可映射，逐字节转 UTF-8。
+    // 该保证只覆盖无 BOM 文件；带 BOM 但载荷损坏说明文件声明与内容矛盾，
+    // 返回 nullopt 而不是按 ISO-8859-1 产出乱码（UTF-16 兜底会混入 NUL 字节）。
     std::string fallback;
     fallback.reserve(bytes.size() * 2);
     for (const char c : bytes) append_utf8(static_cast<unsigned char>(c), fallback);

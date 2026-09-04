@@ -17,11 +17,23 @@ target_include_directories(xiangqi_core PUBLIC include)
 
 if (NOT WIN32)
     # POSIX 下 GBK 解码依赖系统 iconv；显式探测并链接（glibc/musl/macOS 通常已在 libc）。
-    # 缺失时 core 仍可用，只是 PGN 读不了 GBK 文件（PgnManual::gbk_supported() 可探测）。
-    include(CheckIncludeFiles)
-    check_include_files("iconv.h" XIANGQI_HAVE_ICONV)
+    # 探测必须编译+链接一起过：只查头文件会在 iconv.h 存在但库不可链时让 core 链接失败。
+    # 探测失败时 core 仍可用，只是 PGN 读不了 GBK 文件（PgnManual::gbk_supported() 可探测）。
+    include(CheckCXXSourceCompiles)
+    find_library(XIANGQI_ICONV_LIBRARY NAMES iconv libiconv)
+    if (XIANGQI_ICONV_LIBRARY)
+        set(CMAKE_REQUIRED_LIBRARIES ${XIANGQI_ICONV_LIBRARY})
+    endif()
+    check_cxx_source_compiles([[
+#include <iconv.h>
+int main() {
+    iconv_t converter = iconv_open("UTF-8", "GBK");
+    return converter == (iconv_t) -1 ? 1 : 0;
+}
+]] XIANGQI_HAVE_ICONV)
+    unset(CMAKE_REQUIRED_LIBRARIES)
     if (XIANGQI_HAVE_ICONV)
-        find_library(XIANGQI_ICONV_LIBRARY NAMES iconv)
+        target_compile_definitions(xiangqi_core PRIVATE XIANGQI_HAS_ICONV=1)
         if (XIANGQI_ICONV_LIBRARY)
             target_link_libraries(xiangqi_core PRIVATE ${XIANGQI_ICONV_LIBRARY})
         endif()

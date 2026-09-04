@@ -14,6 +14,7 @@
 #else
 #include <cerrno>
 #include <csignal>
+#include <ctime>
 #include <pthread.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -24,6 +25,9 @@ namespace xiangqi {
 namespace {
 
 constexpr std::size_t kMaxCommandHistory = 1024;
+// 启动握手超时：覆盖引擎加载大开局库/神经网络权重的正常耗时；
+// 超时或引擎提前退出都视为启动失败，僵尸引擎不应假成功。
+constexpr std::chrono::seconds kHandshakeTimeout{10};
 
 std::vector<std::string> split_words(std::string_view line) {
     std::istringstream stream{std::string(line)};
@@ -229,6 +233,12 @@ bool Engine::start() {
         if (callbacks_.error) callbacks_.error("创建引擎管道失败");
         return false;
     }
+    // fork 后会 chdir 到引擎目录；含目录组件的相对路径必须先解析成绝对路径，
+    // 否则 execlp 会按新 cwd 解析旧相对路径而找不到可执行文件。
+    std::string exe_path = config_.path;
+    std::error_code resolve_error;
+    const auto resolved = std::filesystem::absolute(config_.path, resolve_error);
+    if (!resolve_error) exe_path = resolved.string();
     const pid_t process_id = fork();
     if (process_id == 0) {
         if (!child_cwd.empty()) chdir(child_cwd.c_str());
@@ -236,7 +246,7 @@ bool Engine::start() {
         dup2(stdout_pipe[1], STDOUT_FILENO);
         dup2(stdout_pipe[1], STDERR_FILENO);
         ::close(stdin_pipe[0]); ::close(stdin_pipe[1]); ::close(stdout_pipe[0]); ::close(stdout_pipe[1]);
-        execlp(config_.path.c_str(), config_.path.c_str(), static_cast<char*>(nullptr));
+        execlp(exe_path.c_str(), exe_path.c_str(), static_cast<char*>(nullptr));
         _exit(127);
     }
     if (process_id < 0) {
@@ -255,9 +265,16 @@ bool Engine::start() {
 #endif
 
     running_ = true;
+    // 握手标志必须在 reader 启动前复位：引擎若瞬间回 uciok，后复位会把真信号清掉。
+    {
+        std::lock_guard lock(handshake_mutex_);
+        handshake_done_ = false;
+    }
     reader_thread_ = std::thread(&Engine::reader_loop, this);
     // 子进程若在握手前退出，reader 会清掉 running_（或写入直接 EPIPE），两种情况都视为启动失败。
     bool started = send(config_.protocol == "ucci" ? "ucci" : "uci");
+    // 写成功只代表命令进了管道；等 uciok/ucciok 确认引擎完成初始化后才能下发 setoption。
+    if (started) started = wait_for_handshake(kHandshakeTimeout);
     if (started) {
         for (const auto& [name, value] : config_.options) {
             if (!send(protocol_.option_command(name, value))) {
@@ -285,40 +302,81 @@ bool Engine::send(std::string command) {
         commands_.push_back(command);
     }
     command.push_back('\n');
-    // 只在取句柄时持锁；阻塞 I/O 期间不持有 process_mutex_，
-    // 否则引擎停止消费 stdin 时 close() 拿不到锁，无法终止进程（管道写满即死锁）。
+    // 写协议：在 process_mutex_ 内登记 writers_active_ 后才允许使用句柄，实际 I/O
+    // 由 write_mutex_ 串行化。close 路径先清共享句柄、终止子进程让阻塞写以断管
+    // 返回，等 writers_active_ 归零后才关闭句柄——关闭动作绝不会命中在途写的
+    // fd/句柄（句柄复用会把数据写进无关对象）。阻塞 I/O 期间仍不持有
+    // process_mutex_，引擎停止消费 stdin 时 close() 不会被写满的管道卡死。
 #ifdef _WIN32
     void* input_write = nullptr;
+    bool registered = false;
     {
         std::lock_guard process_lock(process_mutex_);
         input_write = input_write_;
-    }
-    if (input_write != nullptr && running_) {
-        DWORD written = 0;
-        if (!WriteFile(static_cast<HANDLE>(input_write), command.data(),
-                       static_cast<DWORD>(command.size()), &written, nullptr)) {
-            running_ = false;
-            return false;
+        if (input_write != nullptr && running_) {
+            ++writers_active_;
+            registered = true;
         }
-    } else if (input_write != nullptr) {
+    }
+    if (!registered) return input_write == nullptr;
+    bool ok = false;
+    {
+        std::lock_guard io_lock(write_mutex_);
+        DWORD written = 0;
+        ok = WriteFile(static_cast<HANDLE>(input_write), command.data(),
+                       static_cast<DWORD>(command.size()), &written, nullptr) != FALSE;
+    }
+    finish_send();
+    if (!ok) {
+        running_ = false;
         return false;
     }
 #else
     int input_write = -1;
+    bool registered = false;
     {
         std::lock_guard process_lock(process_mutex_);
         input_write = input_write_;
-    }
-    if (input_write >= 0 && running_) {
-        if (!write_pipe(input_write, command)) {
-            running_ = false;
-            return false;
+        if (input_write >= 0 && running_) {
+            ++writers_active_;
+            registered = true;
         }
-    } else if (input_write >= 0) {
+    }
+    if (!registered) return input_write < 0;
+    bool ok = false;
+    {
+        std::lock_guard io_lock(write_mutex_);
+        ok = write_pipe(input_write, command);
+    }
+    finish_send();
+    if (!ok) {
+        running_ = false;
         return false;
     }
 #endif
     return true;
+}
+
+void Engine::finish_send() {
+    {
+        std::lock_guard lock(process_mutex_);
+        --writers_active_;
+    }
+    write_cv_.notify_all();
+}
+
+// 等待在途写排空。仅由 close 路径调用，且此时子进程已被终止：
+// 管道断裂让阻塞写必然返回，超时只是防御性兜底。
+void Engine::drain_writers() {
+    std::unique_lock lock(process_mutex_);
+    write_cv_.wait_for(lock, std::chrono::seconds(5), [&] { return writers_active_ == 0; });
+}
+
+bool Engine::wait_for_handshake(std::chrono::milliseconds timeout) {
+    std::unique_lock lock(handshake_mutex_);
+    // 引擎死亡（running_ 置 false）也要立即醒来，不对已死进程等满超时。
+    handshake_cv_.wait_for(lock, timeout, [&] { return handshake_done_ || !running_.load(); });
+    return handshake_done_ && running_.load();
 }
 
 void Engine::reader_loop() {
@@ -355,26 +413,22 @@ void Engine::reader_loop() {
     }
     if (!line.empty()) consume_line(line);
     running_ = false;
-#ifdef _WIN32
-    void* input_write = nullptr;
-    {
-        std::lock_guard lock(process_mutex_);
-        input_write = input_write_;
-        input_write_ = nullptr;
-    }
-    if (input_write != nullptr) CloseHandle(static_cast<HANDLE>(input_write));
-#else
-    int input_write = -1;
-    {
-        std::lock_guard lock(process_mutex_);
-        input_write = input_write_;
-        input_write_ = -1;
-    }
-    if (input_write >= 0) ::close(input_write);
-#endif
+    // input_write_ 不在此关闭：在途写可能正持有句柄，统一由 close_locked()
+    // 终止子进程、排空在途写后关闭（见 send() 的写协议注释）。
 }
 
 void Engine::consume_line(std::string_view line) {
+    {
+        // 握手标志行按首尾空白裁剪后精确匹配，避免误匹配恰好包含该子串的其他行。
+        std::string_view trimmed = line;
+        while (!trimmed.empty() && (trimmed.front() == ' ' || trimmed.front() == '\t')) trimmed.remove_prefix(1);
+        while (!trimmed.empty() && (trimmed.back() == ' ' || trimmed.back() == '\t')) trimmed.remove_suffix(1);
+        if (trimmed == "uciok" || trimmed == "ucciok") {
+            std::lock_guard lock(handshake_mutex_);
+            handshake_done_ = true;
+            handshake_cv_.notify_all();
+        }
+    }
     if (line.find("bestmove") != std::string_view::npos) handle_bestmove(line);
     else if (line.find("depth") != std::string_view::npos || line.find("nps") != std::string_view::npos) handle_info(line);
 }
@@ -527,13 +581,16 @@ void Engine::close_locked() {
             process_handle = process_handle_;
             process_handle_ = nullptr;
         }
-        if (input_write != nullptr) CloseHandle(static_cast<HANDLE>(input_write));
         if (process_handle != nullptr) {
-            WaitForSingleObject(static_cast<HANDLE>(process_handle), 1000);
-            if (WaitForSingleObject(static_cast<HANDLE>(process_handle), 0) == WAIT_TIMEOUT) {
+            // 先终止子进程再排空在途写：进程死亡使管道断裂，阻塞的写必然返回。
+            if (WaitForSingleObject(static_cast<HANDLE>(process_handle), 1000) == WAIT_TIMEOUT) {
                 TerminateProcess(static_cast<HANDLE>(process_handle), 1);
             }
             CloseHandle(static_cast<HANDLE>(process_handle));
+        }
+        if (input_write != nullptr) {
+            drain_writers();
+            CloseHandle(static_cast<HANDLE>(input_write));
         }
 #else
         int input_write = -1;
@@ -545,22 +602,34 @@ void Engine::close_locked() {
             process_id = process_id_;
             process_id_ = -1;
         }
-        if (input_write >= 0) ::close(input_write);
         if (process_id >= 0) {
+            // 先确保子进程死亡（SIGTERM 宽限 1 秒后 SIGKILL）再排空在途写：
+            // 进程死亡关闭管道读端，阻塞的 write 以 EPIPE 返回，排空才有界。
             int status = 0;
             pid_t waited = 0;
             do {
                 waited = waitpid(process_id, &status, WNOHANG);
             } while (waited < 0 && errno == EINTR);
             if (waited == 0) {
-                if (kill(process_id, SIGTERM) < 0 && errno != ESRCH) {
-                    // waitpid below still handles a child that exits between
-                    // the status check and kill(2).
+                kill(process_id, SIGTERM);
+                for (int i = 0; i < 20 && waited == 0; ++i) {
+                    const timespec pause{0, 50 * 1000 * 1000};
+                    nanosleep(&pause, nullptr);
+                    do {
+                        waited = waitpid(process_id, &status, WNOHANG);
+                    } while (waited < 0 && errno == EINTR);
                 }
-                do {
-                    waited = waitpid(process_id, &status, 0);
-                } while (waited < 0 && errno == EINTR);
+                if (waited == 0) {
+                    kill(process_id, SIGKILL);
+                    do {
+                        waited = waitpid(process_id, &status, 0);
+                    } while (waited < 0 && errno == EINTR);
+                }
             }
+        }
+        if (input_write >= 0) {
+            drain_writers();
+            ::close(input_write);
         }
 #endif
     } else {
