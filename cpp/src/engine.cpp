@@ -13,6 +13,7 @@
 #include <windows.h>
 #else
 #include <cerrno>
+#include <fcntl.h>
 #include <csignal>
 #include <ctime>
 #include <pthread.h>
@@ -233,12 +234,15 @@ bool Engine::start() {
         if (callbacks_.error) callbacks_.error("创建引擎管道失败");
         return false;
     }
-    // fork 后会 chdir 到引擎目录；含目录组件的相对路径必须先解析成绝对路径，
-    // 否则 execlp 会按新 cwd 解析旧相对路径而找不到可执行文件。
+    // fork 后会 chdir 到引擎目录：含目录组件的路径必须先解析成绝对路径，
+    // 否则 execlp 会按新 cwd 解析旧相对路径而找不到可执行文件；
+    // 纯文件名保持原样，交给 execlp 走 PATH 查找（引擎可能只装在 PATH 里）。
     std::string exe_path = config_.path;
-    std::error_code resolve_error;
-    const auto resolved = std::filesystem::absolute(config_.path, resolve_error);
-    if (!resolve_error) exe_path = resolved.string();
+    if (!parent_dir.empty()) {
+        std::error_code resolve_error;
+        const auto resolved = std::filesystem::absolute(config_.path, resolve_error);
+        if (!resolve_error) exe_path = resolved.string();
+    }
     const pid_t process_id = fork();
     if (process_id == 0) {
         if (!child_cwd.empty()) chdir(child_cwd.c_str());
@@ -413,6 +417,12 @@ void Engine::reader_loop() {
     }
     if (!line.empty()) consume_line(line);
     running_ = false;
+    // 引擎可能在握手前退出而 start() 还在 wait_for_handshake 等待：
+    // 在握手锁内 notify，避免与等待方的谓词检查交错造成丢失唤醒、白等满超时。
+    {
+        std::lock_guard lock(handshake_mutex_);
+        handshake_cv_.notify_all();
+    }
     // input_write_ 不在此关闭：在途写可能正持有句柄，统一由 close_locked()
     // 终止子进程、排空在途写后关闭（见 send() 的写协议注释）。
 }
@@ -423,7 +433,10 @@ void Engine::consume_line(std::string_view line) {
         std::string_view trimmed = line;
         while (!trimmed.empty() && (trimmed.front() == ' ' || trimmed.front() == '\t')) trimmed.remove_prefix(1);
         while (!trimmed.empty() && (trimmed.back() == ' ' || trimmed.back() == '\t')) trimmed.remove_suffix(1);
-        if (trimmed == "uciok" || trimmed == "ucciok") {
+        // 握手 token 必须与配置协议匹配：uci 引擎回 ucciok（或反之）说明配置错乱，
+        // 不能视为启动成功——后续 setoption 语法会全错。
+        const bool is_ucci = config_.protocol == "ucci";
+        if (trimmed == (is_ucci ? "ucciok" : "uciok")) {
             std::lock_guard lock(handshake_mutex_);
             handshake_done_ = true;
             handshake_cv_.notify_all();
@@ -569,7 +582,22 @@ void Engine::close_locked() {
 #endif
         }();
     if (had_process) {
-        if (running_) send("quit");
+        // quit 尽力而为投递：send 可能被满管道上的在途写（持 write_mutex_）无限期
+        // 阻塞，主路径若同步发送会卡死在终止子进程之前。独立线程投递，主路径
+        // 只等一个短暂投递窗口——之后无论 quit 是否送达都进入终止流程，进程
+        // 死亡使一切阻塞写（含 quit 线程自己的写）以断管返回。
+        std::thread quit_thread;
+        std::atomic_bool quit_delivered{false};
+        if (running_) {
+            quit_thread = std::thread([this, &quit_delivered] {
+                send("quit");
+                quit_delivered.store(true);
+            });
+            const auto quit_deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
+            while (!quit_delivered.load() && std::chrono::steady_clock::now() < quit_deadline) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+        }
         running_ = false;
 #ifdef _WIN32
         void* input_write = nullptr;
@@ -632,6 +660,8 @@ void Engine::close_locked() {
             ::close(input_write);
         }
 #endif
+        // 子进程已终止：管道断裂让 quit 线程的写（如有）必然返回，join 有界。
+        if (quit_thread.joinable()) quit_thread.join();
     } else {
         running_ = false;
     }
